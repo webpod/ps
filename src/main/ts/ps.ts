@@ -112,9 +112,13 @@ export const extractWmic = (stdout: string): string => {
  * @param next
  */
 // eslint-disable-next-line sonarjs/cognitive-complexity
-export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions, next?: TPsNext ) => {
+export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPsKillOptions['signal'], next?: TPsNext ) => {
   if (typeof opts == 'function') {
     kill(pid, undefined, opts)
+    return
+  }
+  if (typeof opts == 'string' || typeof opts == 'number') {
+    kill(pid, { signal: opts }, next)
     return
   }
   const {
@@ -192,3 +196,5 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
 
     return m
   }, [])
+
+export default { lookup, kill }
