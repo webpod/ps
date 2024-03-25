@@ -45,10 +45,7 @@ export type TPsNext = (err?: any) => void
  * @return {Object}
  */
 export const lookup = (query: TPsLookupQuery, callback: TPsLookupCallback) => {
-
-  /**
-   * add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
-   */
+  // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
   const { psargs = ['-lx'] } = query
   const args = typeof psargs === 'string' ? psargs.split(/\s+/) : psargs
   const ctx: TSpawnCtx = IS_WIN
@@ -121,7 +118,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions, next
     return
   }
   const {
-    timeout = 30 ,
+    timeout = 30,
     signal = 'SIGTERM'
   } = opts || {}
 
@@ -169,32 +166,29 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions, next
   }
 }
 
-
 export const parseGrid = (output: string) =>
   output
     ? formatOutput(parse(output))
     : []
 
-export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] => {
-  const formatedData: TPsLookupEntry[] = []
-  data.forEach((d) => {
-    const pid = d.PID?.[0]  || d.ProcessId?.[0] || undefined
-    const ppid = d.PPID?.[0] || d.ParentProcessId?.[0] || undefined
-    const cmd = d.CMD || d.CommandLine || d.COMMAND || undefined
+export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
+  data.reduce<TPsLookupEntry[]>((m, d) => {
+    const pid = d.PID?.[0]  || d.ProcessId?.[0]
+    const ppid = d.PPID?.[0] || d.ParentProcessId?.[0]
+    const cmd = d.CMD || d.CommandLine || d.COMMAND || []
 
-    if (pid && cmd) {
+    if (pid && cmd.length > 0) {
       const c = cmd.findIndex((_v, i) => isBin(cmd.slice(0, i).join(''))) - 1
       const command = cmd.slice(0, c).join('')
       const args = cmd.length > 1 ? cmd.slice(c) : []
 
-      formatedData.push({
+      m.push({
         pid: pid,
         ppid: ppid,
         command: command,
         arguments: args
       })
     }
-  })
 
-  return formatedData
-}
+    return m
+  }, [])
