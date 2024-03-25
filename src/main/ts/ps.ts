@@ -2,6 +2,8 @@ import ChildProcess from 'node:child_process'
 import process from 'node:process'
 import fs from 'node:fs'
 import { parse } from '@webpod/ingrid'
+import { exec, TSpawnCtx } from 'zurk/spawn'
+import { EOL as SystemEOL } from 'node:os'
 
 const IS_WIN = process.platform === 'win32'
 const isBin = (f:string): boolean => fs.existsSync(f) && fs.lstatSync(f).isFile()
@@ -14,96 +16,6 @@ const isBin = (f:string): boolean => fs.existsSync(f) && fs.lstatSync(f).isFile(
  * But i'm trying to get every possibilities covered.
  */
 const EOL = /(\r\n)|(\n\r)|\n|\r/;
-const SystemEOL = require('os').EOL;
-
-/**
- * Execute child process
- * @type {Function}
- * @param {String[]} args
- * @param {Function} callback
- * @param {Object=null} callback.err
- * @param {Object[]} callback.stdout
- */
-
-const Exec = function (args, callback) {
-  const spawn = ChildProcess.spawn;
-
-  // on windows, if use ChildProcess.exec(`wmic process get`), the stdout will gives you nothing
-  // that's why I use `cmd` instead
-  if (IS_WIN) {
-
-    const CMD = spawn('cmd');
-    let stdout: any = '';
-    let stderr: any = null;
-
-    CMD.stdout.on('data', function (data) {
-      stdout += data.toString();
-    });
-
-    CMD.stderr.on('data', function (data) {
-
-      if (stderr === null) {
-        stderr = data.toString();
-      }
-      else {
-        stderr += data.toString();
-      }
-    });
-
-    CMD.on('exit', function () {
-
-      let beginRow;
-      stdout = stdout.split(EOL);
-
-      // Find the line index for the titles
-      stdout.forEach(function (out, index) {
-        if (out && typeof beginRow == 'undefined' && out.indexOf('CommandLine') === 0) {
-          beginRow = index;
-        }
-      });
-
-      // get rid of the start (copyright) and the end (current pwd)
-      stdout.splice(stdout.length - 1, 1);
-      stdout.splice(0, beginRow);
-
-      callback(stderr, stdout.join(SystemEOL) || false);
-    });
-
-    CMD.stdin.write('wmic process get ProcessId,ParentProcessId,CommandLine \n');
-    CMD.stdin.end();
-  }
-  else {
-    if (typeof args === 'string') {
-      args = args.split(/\s+/);
-    }
-    const child = spawn('ps', args);
-    let stdout = '';
-    let stderr = null;
-
-    child.stdout.on('data', function (data) {
-      stdout += data.toString();
-    });
-
-    child.stderr.on('data', function (data) {
-
-      if (stderr === null) {
-        stderr = data.toString();
-      }
-      else {
-        stderr += data.toString();
-      }
-    });
-
-    child.on('exit', function () {
-      if (stderr) {
-        return callback(stderr.toString());
-      }
-      else {
-        callback(null, stdout || false);
-      }
-    });
-  }
-};
 
 /**
  * Query Process: Focus on pid & cmd
@@ -117,15 +29,14 @@ const Exec = function (args, callback) {
  * @param {Object[]} callback.processList
  * @return {Object}
  */
-
 export const lookup = (query, callback) => {
 
   /**
    * add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
    */
-  const exeArgs = query.psargs || ['lx'];
-  const filter = {};
-  let idList;
+  const exeArgs = query.psargs || ['-lx']
+  const filter: Record<string, any> = {}
+  let idList: any;
 
   // Lookup by PID
   if (query.pid) {
@@ -138,12 +49,8 @@ export const lookup = (query, callback) => {
     }
 
     // Cast all PIDs as Strings
-    idList = idList.map(function (v) {
-      return String(v);
-    });
-
+    idList = idList.map((v: any) => v + '')
   }
-
 
   if (query.command) {
     filter['command'] = new RegExp(query.command, 'i');
@@ -157,37 +64,75 @@ export const lookup = (query, callback) => {
     filter['ppid'] = new RegExp(query.ppid);
   }
 
-  return Exec(exeArgs, function (err, output) {
-    if (err) {
-      return callback(err);
+  const extractProcessList = (output: string) => {
+    const processList = parseGrid(output.trim())
+    const resultList: any[] = [];
+
+    processList.forEach(function (p) {
+      let flt;
+      let type;
+      let result = true;
+
+      if (idList && idList.indexOf(String(p.pid)) < 0) {
+        return;
+      }
+
+      for (type in filter) {
+        flt = filter[type];
+        result = flt.test(p[type]) ? result : false;
+      }
+
+      if (result) {
+        resultList.push(p);
+      }
+    });
+
+    return resultList
+  }
+
+  const args = typeof exeArgs === 'string' ? exeArgs.split(/\s+/) : exeArgs
+  const ctx: TSpawnCtx = IS_WIN
+    ? {
+      cmd: 'cmd',
+      input: 'wmic process get ProcessId,ParentProcessId,CommandLine \n',
+      callback(err, {stdout}) {
+        if (err) return callback(err)
+
+        callback(null, extractProcessList(extractWmic(stdout)))
+      },
+      run(cb) {cb()}
     }
-    else {
-      const processList = parseGrid(output.trim());
-      const resultList = [];
+    : {
+      cmd: 'ps',
+      args,
+      run(cb) {cb()},
+      callback(err, {stdout}) {
+        if (err) return callback(err)
 
-      processList.forEach(function (p) {
-        let flt;
-        let type;
-        let result = true;
+        return callback(null, extractProcessList(stdout))
+      }
+    }
 
-        if (idList && idList.indexOf(String(p.pid)) < 0) {
-          return;
-        }
+  exec(ctx)
+};
 
-        for (type in filter) {
-          flt = filter[type];
-          result = flt.test(p[type]) ? result : false;
-        }
+export const extractWmic = (stdout: string): string => {
+  const _stdout = stdout.split(EOL)
+  let beginRow: number = 0
 
-        if (result) {
-          resultList.push(p);
-        }
-      });
-
-      callback(null, resultList);
+  // Find the line index for the titles
+  _stdout.forEach((out, index) => {
+    if (out && typeof beginRow == 'undefined' && out.indexOf('CommandLine') === 0) {
+      beginRow = index
     }
   });
-};
+
+  // get rid of the start (copyright) and the end (current pwd)
+  _stdout.splice(_stdout.length - 1, 1)
+  _stdout.splice(0, beginRow)
+
+  return _stdout.join(SystemEOL)
+}
 
 /**
  * Kill process
@@ -197,7 +142,6 @@ export const lookup = (query, callback) => {
  * @param {number} signal.timeout
  * @param next
  */
-
 export const kill = (pid: string | number, signal, next ) => {
   //opts are optional
   if(!next && typeof signal == 'function'){
@@ -255,7 +199,6 @@ export const kill = (pid: string | number, signal, next ) => {
  * Parse the stdout into readable object.
  * @param {String} output
  */
-
 function parseGrid(output) {
   if (!output) {
     return [];

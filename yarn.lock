@@ -3097,3 +3097,8 @@ yocto-queue@^0.1.0:
   version "0.1.0"
   resolved "https://registry.yarnpkg.com/yocto-queue/-/yocto-queue-0.1.0.tgz#0294eb3dee05028d31ee1a5fa2c556a6aaf10a1b"
   integrity sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==
+
+zurk@^0.0.31:
+  version "0.0.31"
+  resolved "https://registry.yarnpkg.com/zurk/-/zurk-0.0.31.tgz#d4299b5ea776792872d022e9d962f5f40598fb21"
+  integrity sha512-rYp8YgJFaNgTEe9/s607CqIxhJtls8Uik6hQGiPOus+5iyKphc5Xk5stLzE1bO+JnY73T/6MXI8DbnpkJQXYpA==

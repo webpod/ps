@@ -1,11 +1,9 @@
-var PS = require('../target/cjs/index.cjs');
-
-console.log('ps', PS)
-
-var CP = require('child_process');
-var assert = require('assert');
-var Path = require('path');
+var CP = require('node:child_process');
+var assert = require('node:assert');
+var Path = require('node:path');
 var Sinon = require('sinon');
+
+var PS = require('../target/cjs/index.cjs');
 
 var serverPath = Path.resolve(__dirname, './node_process_for_test.cjs');
 var UpperCaseArg = '--UPPER_CASE';
@@ -116,8 +114,6 @@ describe('test', function () {
       PS.lookup({pid}, function (err, list) {
         assert.equal(list.length, 1);
         PS.kill(pid, function (err) {
-          console.log('!!!', pid)
-
           assert.equal(err, null);
           PS.lookup({pid: pid}, function (err, list) {
             assert.equal(list.length, 0);
@@ -165,9 +161,11 @@ describe('test', function () {
   describe('#kill() timeout: ', function () {
     it('it should timeout after 30secs by default if the killing is not successful', function(done) {
       mockKill();
+
       var clock = Sinon.useFakeTimers();
       var killStartDate = Date.now();
-      PS.lookup({pid: pid}, function (err, list) {
+
+      PS.lookup({pid}, function (err, list) {
         assert.equal(list.length, 1);
         PS.kill(pid, function (err) {
           assert.equal(Date.now() - killStartDate >= 30 * 1000, true);
@@ -184,6 +182,7 @@ describe('test', function () {
 
     it('it should be able to set option to set the timeout', function(done) {
       mockKill();
+
       var clock = Sinon.useFakeTimers();
       var killStartDate = Date.now();
       PS.lookup({pid: pid}, function (err, list) {
