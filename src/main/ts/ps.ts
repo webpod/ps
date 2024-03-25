@@ -38,7 +38,7 @@ export type TPsNext = (err?: any) => void
  * @param {String|String[]} query.pid
  * @param {String} query.command RegExp String
  * @param {String} query.arguments RegExp String
- * @param {String|array} query.psargs
+ * @param {String|String[]} query.psargs
  * @param {Function} callback
  * @param {Object=null} callback.err
  * @param {Object[]} callback.processList
@@ -49,8 +49,8 @@ export const lookup = (query: TPsLookupQuery, callback: TPsLookupCallback) => {
   /**
    * add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
    */
-  const exeArgs = query.psargs || ['-lx']
-  const args = typeof exeArgs === 'string' ? exeArgs.split(/\s+/) : exeArgs
+  const { psargs = ['-lx'] } = query
+  const args = typeof psargs === 'string' ? psargs.split(/\s+/) : psargs
   const ctx: TSpawnCtx = IS_WIN
     ? {
       cmd: 'cmd',
@@ -95,16 +95,11 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
 
 export const extractWmic = (stdout: string): string => {
   const _stdout = stdout.split(EOL)
-  let beginRow: number = 0
-
   // Find the line index for the titles
-  _stdout.forEach((out, index) => {
-    if (out && typeof beginRow == 'undefined' && out.indexOf('CommandLine') === 0) {
-      beginRow = index
-    }
-  })
+  const beginRow = _stdout.findIndex((out) => out.indexOf('CommandLine') === 0)
 
   // get rid of the start (copyright) and the end (current pwd)
+  // eslint-disable-next-line unicorn/prefer-negative-index
   _stdout.splice(_stdout.length - 1, 1)
   _stdout.splice(0, beginRow)
 
@@ -119,6 +114,7 @@ export const extractWmic = (stdout: string): string => {
  * @param {number} opts.timeout
  * @param next
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions, next?: TPsNext ) => {
   if (typeof opts == 'function') {
     kill(pid, undefined, opts)
