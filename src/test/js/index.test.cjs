@@ -1,9 +1,10 @@
 const assert = require('node:assert')
 const { describe, it } = require('node:test')
-const { foo } = require('@webpod/ps')
+const { lookup, kill } = require('@webpod/ps')
 
-describe('cjs foo()', () => {
-  it('is callable', () => {
-    assert.equal(foo(), undefined)
+describe('cjs index()', () => {
+  it('has proper exports', () => {
+    assert.equal(typeof lookup, 'function')
+    assert.equal(typeof kill, 'function')
   })
 })

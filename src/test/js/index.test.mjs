@@ -1,9 +1,10 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
-import { foo } from '@webpod/ps'
+import { lookup, kill } from '@webpod/ps'
 
-describe('mjs foo()', () => {
-  it('is callable', () => {
-    assert.equal(foo(), undefined)
+describe('mjs index', () => {
+  it('has proper exports', () => {
+    assert.equal(typeof lookup, 'function')
+    assert.equal(typeof kill, 'function')
   })
 })

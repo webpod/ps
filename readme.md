@@ -3,12 +3,12 @@
 > A Node.js module for looking up running processes. Originated from [neekey/ps](https://github.com/neekey/ps), [UmbraEngineering/ps](https://github.com/UmbraEngineering/ps) and completely reforged.
 
 ## Differences
-* [ ] Rewritten in TypeScript
-* [ ] CJS and ESM entry points
+* [x] Rewritten in TypeScript
+* [x] CJS and ESM package entry points
 * [x] `table-parser` replaced with `@webpod/ingrid` to handle some issues: [neekey/ps#76](https://github.com/neekey/ps/issues/76), [neekey/ps#62](https://github.com/neekey/ps/issues/62), [neekey/table-parser#11](https://github.com/neekey/table-parser/issues/11), [neekey/table-parser#18](https://github.com/neekey/table-parser/issues/18)
 * [ ] Provides promisified responses
-* [ ] Provides sync API
-* [ ] Adds process tree resolution
+* [ ] Brings sync API
+* [ ] Builds a process tree
 
 ## Install
 ```bash

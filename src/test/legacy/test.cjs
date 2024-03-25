@@ -1,9 +1,12 @@
+// Inlined as is from the upstream to verify the backward compatibility
+// https://github.com/neekey/ps/tree/master/test
+
 var CP = require('node:child_process');
 var assert = require('node:assert');
 var Path = require('node:path');
 var Sinon = require('sinon');
 
-var PS = require('../target/cjs/index.cjs');
+var PS = require('@webpod/ps');
 
 var serverPath = Path.resolve(__dirname, './node_process_for_test.cjs');
 var UpperCaseArg = '--UPPER_CASE';
