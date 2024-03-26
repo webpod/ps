@@ -37,7 +37,7 @@ export type TPsKillOptions = {
   signal?: string | number | NodeJS.Signals
 }
 
-export type TPsNext = (err?: any) => void
+export type TPsNext = (err?: any, data?: any) => void
 
 /**
  * Query Process: Focus on pid & cmd
@@ -159,7 +159,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
       if (err) {
         clearTimeout(checkTimeoutTimer)
         reject(err)
-        finishCallback?.(err)
+        finishCallback?.(err, pid)
       }
 
       else if (list.length > 0) {
@@ -171,8 +171,8 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
         checkConfident++
         if (checkConfident === 5) {
           clearTimeout(checkTimeoutTimer)
-          resolve()
-          finishCallback?.()
+          resolve(pid)
+          finishCallback?.(null, pid)
         } else {
           checkKilled(finishCallback)
         }
@@ -186,7 +186,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
       next(new Error('Kill process timeout'))
     }, timeout * 1000)
   } else {
-    resolve()
+    resolve(pid)
   }
 
   return promise

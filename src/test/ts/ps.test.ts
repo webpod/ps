@@ -57,7 +57,8 @@ describe('kill()', () => {
     const pid = cp.fork(testScript, testScriptArgs).pid as number
     assert.equal((await lookup({ pid })).length, 1)
 
-    await kill(pid, {timeout: 1}, cb)
+    const _pid = await kill(pid, {timeout: 1}, cb)
+    assert.equal(pid, _pid)
     assert.equal((await lookup({ pid })).length, 0)
     assert.equal(cheked, true)
   })

@@ -28,15 +28,18 @@ Searches for the process by the specified `pid`.
 ```ts
 import {lookup} from '@webpod/ps'
 
-// A simple pid lookup
-lookup({pid: 12345}, (err, resultList) => {
+// Both callback and promise styles are supported
+const list = await lookup({pid: 12345})
+
+// or
+lookup({pid: 12345}, (err, list) => {
   if (err) {
     throw new Error(err)
   }
 
-  var process = resultList[0]
-  if (process) {
-    console.log('PID: %s, COMMAND: %s, ARGUMENTS: %s', process.pid, process.command, process.arguments)
+  const [found] = list
+  if (found) {
+    console.log('PID: %s, COMMAND: %s, ARGUMENTS: %s', found.pid, found.command, found.arguments)
   } else {
     console.log('No such process found!')
   }
@@ -45,19 +48,13 @@ lookup({pid: 12345}, (err, resultList) => {
 
 Define a query opts to filter the results by `command` and/or `arguments` predicates:
 ```ts
-lookup({
+const list = await lookup({
   command: 'node', // it will be used to build a regex 
   arguments: '--debug',
-}, (err, resultList) => {
-  if (err) {
-    throw new Error(err)
-  }
+})
 
-  resultList.forEach(process => {
-    if (process) {
-      console.log('PID: %s, COMMAND: %s, ARGUMENTS: %s', process.pid, process.command, process.arguments);
-    }
-  })
+list.forEach(entry => {
+  console.log('PID: %s, COMMAND: %s, ARGUMENTS: %s', entry.pid, entry.command, entry.arguments);
 })
 ```
 
@@ -88,7 +85,7 @@ Eliminates the process by its `pid`.
 ```ts
 import { kill } from '@webpod/ps'
 
-kill('12345', err => {
+kill('12345', (err, pid) => {
   if (err) {
     throw new Error(err)
   } else {
@@ -103,7 +100,7 @@ Method `kill` also supports a `signal` option to be passed. It's only a wrapper 
 import { kill } from '@webpod/ps'
 
 // Pass signal SIGKILL for killing the process without allowing it to clean up
-kill('12345', 'SIGKILL', err => {
+kill('12345', 'SIGKILL', (err, pid) => {
   if (err) {
     throw new Error(err)
   } else {
