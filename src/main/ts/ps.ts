@@ -28,7 +28,7 @@ export type TPsLookupQuery = {
   pid?: number | string | (string | number)[]
   command?: string
   arguments?: string
-  ppid?: string
+  ppid?: number | string
   psargs?: string | string[]
 }
 
@@ -52,7 +52,7 @@ export type TPsNext = (err?: any, data?: any) => void
  * @return {Object}
  */
 export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop) => {
-  const { promise, resolve, reject } = makeDeferred()
+  const { promise, resolve, reject } = makeDeferred<TPsLookupEntry[]>()
   const { psargs = ['-lx'] } = query // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
   const args = typeof psargs === 'string' ? psargs.split(/\s+/) : psargs
   const extract = IS_WIN ? extractWmic : identity
@@ -94,7 +94,7 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
   const filter = (['command', 'arguments', 'ppid'] as Array<TFilterKeys>)
     .reduce((m, k) => {
       const param = query[k]
-      if (param) m[k] = new RegExp(param, 'i')
+      if (param) m[k] = new RegExp(param + '', 'i')
       return m
   }, {} as Record<TFilterKeys, RegExp>)
 
@@ -114,6 +114,36 @@ export const extractWmic = (stdout: string): string => {
   _stdout.splice(0, beginRow)
 
   return _stdout.join(SystemEOL)
+}
+
+export type TPsTreeOpts = {
+  pid: string | number
+  recursive?: boolean
+}
+
+export const pickTree = (list: TPsLookupEntry[], pid: string | number, recursive = false): TPsLookupEntry[] => {
+  const children = list.filter(p => p.ppid === pid + '')
+  return [
+    ...children,
+    ...children.flatMap(p => recursive ? pickTree(list, p.pid, true) : [])
+  ]
+}
+
+export const tree = async (opts: string | number | TPsTreeOpts, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> => {
+  if (typeof opts === 'string' || typeof opts === 'number') {
+    return tree({ pid: opts }, cb)
+  }
+
+  try {
+    const {pid, recursive = false} = opts
+    const list = pickTree(await lookup(), pid, recursive)
+
+    cb(null, list)
+    return list
+  } catch (err) {
+    cb(err)
+    throw err
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
-import { kill, lookup } from './ps.ts'
+import { kill, lookup, tree } from './ps.ts'
 
 export type * from './ps.ts'
-export { kill, lookup } from './ps.ts'
-export default { lookup, kill }
+export { kill, lookup, tree } from './ps.ts'
+export default { lookup, kill, tree }

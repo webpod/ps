@@ -8,7 +8,7 @@
 * [x] `table-parser` replaced with `@webpod/ingrid` to handle some issues: [neekey/ps#76](https://github.com/neekey/ps/issues/76), [neekey/ps#62](https://github.com/neekey/ps/issues/62), [neekey/table-parser#11](https://github.com/neekey/table-parser/issues/11), [neekey/table-parser#18](https://github.com/neekey/table-parser/issues/18)
 * [x] Provides promisified responses
 * [ ] Brings sync API
-* [ ] Builds a process tree
+* [x] Builds a process tree
 
 ## Install
 ```bash
@@ -77,6 +77,38 @@ lookup({
 }, (err, resultList) => {
  // ...
 })
+```
+
+### tree()
+Returns a child processes list by the specified parent `pid`. Some kind of shortcut for `lookup({ppid: pid})`.
+```ts
+import { tree } from '@webpod/ps'
+
+const children = await tree(123) 
+/**
+[
+  {pid: 124, ppid: 123},
+  {pid: 125, ppid: 123}
+] 
+*/
+```
+
+To obtain all nested children, set `recursive` option to `true`:
+```ts
+const children = await tree({pid: 123, recursive: true}) 
+/**
+[
+  {pid: 124, ppid: 123},
+  {pid: 125, ppid: 123},
+
+  {pid: 126, ppid: 124},
+  {pid: 127, ppid: 124},
+  {pid: 128, ppid: 124},
+  
+  {pid: 129, ppid: 125},
+  {pid: 130, ppid: 125},
+] 
+*/
 ```
 
 ### kill()
