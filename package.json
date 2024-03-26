@@ -1,6 +1,6 @@
 {
   "name": "@webpod/ps",
-  "version": "0.0.0",
+  "version": "0.0.0-beta.2",
   "description": "A process lookup utility",
   "publishConfig": {
     "access": "public"
@@ -24,7 +24,8 @@
     "test": "concurrently 'npm:test:*'",
     "test:lint": "eslint -c src/test/lint/.eslintrc.json src",
     "test:unit": "c8 -r lcov -r text -o target/coverage -x src/scripts -x src/test -x target node --loader ts-node/esm --experimental-specifier-resolution=node src/scripts/test.mjs",
-    "test:legacy": "node ./node_modules/mocha/bin/mocha -t 0 -R spec src/test/legacy/test.cjs"
+    "test:legacy": "node ./node_modules/mocha/bin/mocha -t 0 -R spec src/test/legacy/test.cjs",
+    "publish:draft": "npm run build && npm publish --no-git-tag-version"
   },
   "files": [
     "target/cjs",
@@ -38,7 +39,7 @@
     "pid"
   ],
   "dependencies": {
-    "@webpod/ingrid": "^0.0.0-beta.1",
+    "@webpod/ingrid": "^0.0.0-beta.2",
     "zurk": "^0.0.32"
   },
   "devDependencies": {

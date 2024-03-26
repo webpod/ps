@@ -1,5 +1,5 @@
-import { kill, lookup, tree } from './ps.ts'
+import { kill, lookup, tree } from './ps.js'
 
-export type * from './ps.ts'
-export { kill, lookup, tree } from './ps.ts'
+export type * from './ps.js'
+export { kill, lookup, tree } from './ps.js'
 export default { lookup, kill, tree }
