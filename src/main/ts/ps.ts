@@ -106,7 +106,7 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
 export const extractWmic = (stdout: string): string => {
   const _stdout = stdout.split(EOL)
   // Find the line index for the titles
-  const beginRow = _stdout.findIndex((out) => out.indexOf('CommandLine') === 0)
+  const beginRow = _stdout.findIndex(out => out?.indexOf('CommandLine') === 0)
 
   // get rid of the start (copyright) and the end (current pwd)
   // eslint-disable-next-line unicorn/prefer-negative-index
