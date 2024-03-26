@@ -194,7 +194,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
 
 export const parseGrid = (output: string) =>
   output
-    ? formatOutput(parse(output))
+    ? formatOutput(parse(output, { format: IS_WIN ? 'win' : 'unix' }))
     : []
 
 export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
