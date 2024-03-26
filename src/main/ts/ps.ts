@@ -91,15 +91,14 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
 
   const processList = parseGrid(output.trim())
   const pidList= (query.pid === undefined ? [] : [query.pid].flat(1)).map(v => v + '')
-  const filter = (['command', 'arguments', 'ppid'] as Array<TFilterKeys>)
-    .reduce((m, k) => {
-      const param = query[k]
-      if (param) m[k] = new RegExp(param + '', 'i')
-      return m
-  }, {} as Record<TFilterKeys, RegExp>)
+  const filters: Array<(p: TPsLookupEntry) => boolean> = [
+    p => query.command ? new RegExp(query.command, 'i').test(p.command) : true,
+    p => query.arguments ? new RegExp(query.arguments, 'i').test(p.arguments.join(' ')) : true,
+    p => query.ppid ? query.ppid + '' === p.ppid : true
+  ]
 
   return processList.filter(p =>
-    (pidList.length === 0 || pidList.includes(p.pid)) && Object.keys(filter).every((type) => filter[type as TFilterKeys].test(p[type as keyof TPsLookupEntry] + ''))
+    (pidList.length === 0 || pidList.includes(p.pid)) && filters.every(f => f(p))
   )
 }
 
