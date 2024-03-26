@@ -2,6 +2,9 @@
   "name": "@webpod/ps",
   "version": "0.0.0",
   "description": "A process lookup utility",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "target/cjs/index.cjs",
   "exports": {
