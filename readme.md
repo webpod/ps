@@ -6,7 +6,7 @@
 * [x] Rewritten in TypeScript
 * [x] CJS and ESM package entry points
 * [x] `table-parser` replaced with `@webpod/ingrid` to handle some issues: [neekey/ps#76](https://github.com/neekey/ps/issues/76), [neekey/ps#62](https://github.com/neekey/ps/issues/62), [neekey/table-parser#11](https://github.com/neekey/table-parser/issues/11), [neekey/table-parser#18](https://github.com/neekey/table-parser/issues/18)
-* [ ] Provides promisified responses
+* [x] Provides promisified responses
 * [ ] Brings sync API
 * [ ] Builds a process tree
 

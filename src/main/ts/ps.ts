@@ -6,7 +6,14 @@ import { EOL as SystemEOL } from 'node:os'
 
 const EOL = /(\r\n)|(\n\r)|\n|\r/
 const IS_WIN = process.platform === 'win32'
-const isBin = (f:string): boolean => fs.existsSync(f) && fs.lstatSync(f).isFile()
+const isBin = (f: string): boolean => {
+  if (f === '') return false
+  if (!f.includes('/')) return true
+  if (!fs.existsSync(f)) return false
+
+  const stat = fs.lstatSync(f)
+  return stat.isFile() || stat.isSymbolicLink()
+}
 
 export type TPsLookupCallback = (err: any, processList?: TPsLookupEntry[]) => void
 
@@ -39,38 +46,44 @@ export type TPsNext = (err?: any) => void
  * @param {String} query.command RegExp String
  * @param {String} query.arguments RegExp String
  * @param {String|String[]} query.psargs
- * @param {Function} callback
- * @param {Object=null} callback.err
- * @param {Object[]} callback.processList
+ * @param {Function} cb
+ * @param {Object=null} cb.err
+ * @param {Object[]} cb.processList
  * @return {Object}
  */
-export const lookup = (query: TPsLookupQuery, callback: TPsLookupCallback) => {
-  // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
-  const { psargs = ['-lx'] } = query
+export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop) => {
+  const { promise, resolve, reject } = makeDeferred()
+  const { psargs = ['-lx'] } = query // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
   const args = typeof psargs === 'string' ? psargs.split(/\s+/) : psargs
+  const extract = IS_WIN ? extractWmic : identity
+  const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
+    if (err) {
+      reject(err)
+      cb(err)
+      return
+    }
+
+    const list = parseProcessList(extract(stdout), query)
+    resolve(list)
+    cb(null, list)
+  }
   const ctx: TSpawnCtx = IS_WIN
     ? {
       cmd: 'cmd',
       input: 'wmic process get ProcessId,ParentProcessId,CommandLine \n',
-      callback(err, {stdout}) {
-        if (err) return callback(err)
-
-        callback(null, parseProcessList(extractWmic(stdout), query))
-      },
+      callback,
       run(cb) {cb()}
     }
     : {
       cmd: 'ps',
       args,
       run(cb) {cb()},
-      callback(err, {stdout}) {
-        if (err) return callback(err)
-
-        return callback(null, parseProcessList(stdout, query))
-      }
+      callback,
     }
 
   exec(ctx)
+
+  return promise
 }
 
 export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => {
@@ -112,15 +125,15 @@ export const extractWmic = (stdout: string): string => {
  * @param next
  */
 // eslint-disable-next-line sonarjs/cognitive-complexity
-export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPsKillOptions['signal'], next?: TPsNext ) => {
+export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPsKillOptions['signal'], next?: TPsNext ): Promise<void> => {
   if (typeof opts == 'function') {
-    kill(pid, undefined, opts)
-    return
+    return kill(pid, undefined, opts)
   }
   if (typeof opts == 'string' || typeof opts == 'number') {
-    kill(pid, { signal: opts }, next)
-    return
+    return kill(pid, { signal: opts }, next)
   }
+
+  const { promise, resolve, reject } = makeDeferred()
   const {
     timeout = 30,
     signal = 'SIGTERM'
@@ -129,7 +142,10 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
   try {
     process.kill(+pid, signal)
   } catch(e) {
-    return next?.(e)
+    reject(e)
+    next?.(e)
+
+    return promise
   }
 
   let checkConfident = 0
@@ -142,6 +158,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
 
       if (err) {
         clearTimeout(checkTimeoutTimer)
+        reject(err)
         finishCallback?.(err)
       }
 
@@ -154,6 +171,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
         checkConfident++
         if (checkConfident === 5) {
           clearTimeout(checkTimeoutTimer)
+          resolve()
           finishCallback?.()
         } else {
           checkKilled(finishCallback)
@@ -167,7 +185,11 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
       checkIsTimeout = true
       next(new Error('Kill process timeout'))
     }, timeout * 1000)
+  } else {
+    resolve()
   }
+
+  return promise
 }
 
 export const parseGrid = (output: string) =>
@@ -182,8 +204,8 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
     const cmd = d.CMD || d.CommandLine || d.COMMAND || []
 
     if (pid && cmd.length > 0) {
-      const c = cmd.findIndex((_v, i) => isBin(cmd.slice(0, i).join(''))) - 1
-      const command = cmd.slice(0, c).join('')
+      const c = (cmd.findIndex((_v, i) => isBin(cmd.slice(0, i).join(' '))))
+      const command = cmd.slice(0, c).join(' ')
       const args = cmd.length > 1 ? cmd.slice(c) : []
 
       m.push({
@@ -197,4 +219,15 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
     return m
   }, [])
 
-export default { lookup, kill }
+export type PromiseResolve<T = any> = (value?: T | PromiseLike<T>) => void
+
+export const makeDeferred = <T = any, E = any>(): { promise: Promise<T>, resolve: PromiseResolve<T>, reject: PromiseResolve<E> } => {
+  let resolve
+  let reject
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+  return { resolve, reject, promise } as any
+}
+
+export const noop = () => {/* noop */}
+
+export const identity = <T>(v: T): T => v
