@@ -128,14 +128,17 @@ export const pickTree = (list: TPsLookupEntry[], pid: string | number, recursive
   ]
 }
 
-export const tree = async (opts: string | number | TPsTreeOpts, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> => {
+export const tree = async (opts?: string | number | TPsTreeOpts | undefined, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> => {
   if (typeof opts === 'string' || typeof opts === 'number') {
     return tree({ pid: opts }, cb)
   }
 
   try {
+    const all = await lookup()
+    if (opts === undefined) return all
+
     const {pid, recursive = false} = opts
-    const list = pickTree(await lookup(), pid, recursive)
+    const list = pickTree(all, pid, recursive)
 
     cb(null, list)
     return list

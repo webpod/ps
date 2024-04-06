@@ -83,4 +83,9 @@ describe('tree()', () => {
 
     assert.equal((await lookup({ arguments: marker })).length, 0)
   })
+
+  it('returns all ps list if no opts provided', async () => {
+    const list = await tree()
+    assert.ok(list.length > 0)
+  })
 })
