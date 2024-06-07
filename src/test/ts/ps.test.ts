@@ -3,7 +3,7 @@ import { describe, it, before, after } from 'node:test'
 import process from 'node:process'
 import * as cp from 'node:child_process'
 import * as path from 'node:path'
-import { kill, lookup, tree } from '../../main/ts/ps.ts'
+import { kill, lookup, lookupSync, tree, treeSync } from '../../main/ts/ps.ts'
 
 const __dirname = new URL('.', import.meta.url).pathname
 const marker = Math.random().toString(16).slice(2)
@@ -40,6 +40,27 @@ describe('lookup()', () => {
 
     assert.equal(list.length, 1)
     assert.equal(list[0].pid, pid)
+  })
+})
+
+describe('lookupSync()', () => {
+  let pid: number
+  before(() => {
+    pid = cp.fork(testScript, testScriptArgs).pid as number
+  })
+
+  after(() => {
+    try {
+      process.kill(pid)
+    } catch (err) { void err }
+  })
+
+  it('returns a process list', () => {
+    const list = lookupSync()
+    assert.ok(list.length > 0)
+  })
+  it('lookup.sync refs to lookupSync', () => {
+    assert.equal(lookup.sync, lookupSync)
   })
 })
 
@@ -87,5 +108,29 @@ describe('tree()', () => {
   it('returns all ps list if no opts provided', async () => {
     const list = await tree()
     assert.ok(list.length > 0)
+  })
+})
+
+describe('treeSync()', () => {
+  it('tree.sync refs to treeSync', () => {
+    assert.equal(tree.sync, treeSync)
+  })
+
+  it('returns 1st level child', async () => {
+    const pid = cp.fork(testScript, [...testScriptArgs, '--fork=1', '--depth=2']).pid as number
+    await new Promise(resolve => setTimeout(resolve, 2000)) // wait for child process to spawn
+
+    const list = lookupSync({ arguments: marker })
+    const children = treeSync(pid)
+    const childrenAll =  treeSync({pid, recursive: true})
+
+    await Promise.all(list.map(p => kill(p.pid)))
+    await kill(pid)
+
+    assert.equal(children.length, 1)
+    assert.equal(childrenAll.length, 2)
+    assert.equal(list.length, 3)
+
+    assert.equal((await lookup({ arguments: marker })).length, 0)
   })
 })

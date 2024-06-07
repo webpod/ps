@@ -1,8 +1,8 @@
 import process from 'node:process'
 import fs from 'node:fs'
+import { EOL as SystemEOL } from 'node:os'
 import { parse, TIngridResponse } from '@webpod/ingrid'
 import { exec, TSpawnCtx } from 'zurk/spawn'
-import { EOL as SystemEOL } from 'node:os'
 
 const EOL = /(\r\n)|(\n\r)|\n|\r/
 const IS_WIN = process.platform === 'win32'
@@ -46,44 +46,76 @@ export type TPsNext = (err?: any, data?: any) => void
  * @param {String} query.command RegExp String
  * @param {String} query.arguments RegExp String
  * @param {String|String[]} query.psargs
- * @param {Function} cb
+ * @param {Function} [cb]
+ * @param {Object=null} cb.err
+ * @param {TPsLookupEntry[]} cb.processList
+ * @return {Promise<TPsLookupEntry[]>}
+ */
+export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> =>
+  _lookup({query, cb, sync: false})
+
+/**
+ * Looks up the process list synchronously
+ * @param query
+ * @param {String|String[]} query.pid
+ * @param {String} query.command RegExp String
+ * @param {String} query.arguments RegExp String
+ * @param {String|String[]} query.psargs
+ * @param {Function} [cb]
  * @param {Object=null} cb.err
  * @param {Object[]} cb.processList
- * @return {Object}
+ * @return {TPsLookupEntry[]}
  */
-export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop) => {
-  const { promise, resolve, reject } = makeDeferred<TPsLookupEntry[]>()
+export const lookupSync = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop): TPsLookupEntry[] =>
+  _lookup({query, cb, sync: true})
+
+lookup.sync = lookupSync
+
+const _lookup = ({
+    query = {},
+    cb = noop,
+    sync = false
+  }: {
+    sync?: boolean
+    cb?: TPsLookupCallback
+    query?: TPsLookupQuery
+  }) => {
+  const pFactory = sync ? makePseudoDeferred.bind(null, []) : makeDeferred
+  const { promise, resolve, reject } = pFactory()
   const { psargs = ['-lx'] } = query // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
-  const args = typeof psargs === 'string' ? psargs.split(/\s+/) : psargs
+  const args = Array.isArray(psargs) ? psargs : psargs.split(/\s+/)
   const extract = IS_WIN ? extractWmic : identity
+
+  let result: TPsLookupEntry[] = []
   const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
     if (err) {
       reject(err)
       cb(err)
       return
     }
-
-    const list = parseProcessList(extract(stdout), query)
-    resolve(list)
-    cb(null, list)
+    result = parseProcessList(extract(stdout), query)
+    resolve(result)
+    cb(null, result)
   }
   const ctx: TSpawnCtx = IS_WIN
     ? {
       cmd: 'cmd',
       input: 'wmic process get ProcessId,ParentProcessId,CommandLine \n',
       callback,
+      sync,
       run(cb) {cb()}
     }
     : {
       cmd: 'ps',
       args,
       run(cb) {cb()},
+      sync,
       callback,
     }
 
   exec(ctx)
 
-  return promise
+  return Object.assign(promise, result)
 }
 
 export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => {
@@ -128,13 +160,19 @@ export const pickTree = (list: TPsLookupEntry[], pid: string | number, recursive
   ]
 }
 
-export const tree = async (opts?: string | number | TPsTreeOpts | undefined, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> => {
+const _tree = ({
+  cb = noop,
+  opts,
+  sync = false
+}: {
+  opts?: string | number | TPsTreeOpts | undefined
+  cb?: TPsLookupCallback
+  sync?: boolean
+}): any => {
   if (typeof opts === 'string' || typeof opts === 'number') {
-    return tree({ pid: opts }, cb)
+    return _tree({opts: {pid: opts}, cb, sync})
   }
-
-  try {
-    const all = await lookup()
+  const handle = (all: TPsLookupEntry[]) => {
     if (opts === undefined) return all
 
     const {pid, recursive = false} = opts
@@ -142,11 +180,24 @@ export const tree = async (opts?: string | number | TPsTreeOpts | undefined, cb:
 
     cb(null, list)
     return list
+  }
+
+  try {
+    const all = _lookup({sync})
+    return sync ? handle(all) : all.then(handle)
   } catch (err) {
     cb(err)
     throw err
   }
 }
+
+export const tree = async (opts?: string | number | TPsTreeOpts | undefined, cb?: TPsLookupCallback): Promise<TPsLookupEntry[]> =>
+  _tree({opts, cb})
+
+export const treeSync = (opts?: string | number | TPsTreeOpts | undefined, cb?: TPsLookupCallback): TPsLookupEntry[] =>
+  _tree({opts, cb, sync: true})
+
+tree.sync = treeSync
 
 /**
  * Kill process
@@ -253,13 +304,23 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
 
 export type PromiseResolve<T = any> = (value?: T | PromiseLike<T>) => void
 
-export const makeDeferred = <T = any, E = any>(): { promise: Promise<T>, resolve: PromiseResolve<T>, reject: PromiseResolve<E> } => {
+const makeDeferred = <T = any, E = any>(): { promise: Promise<T>, resolve: PromiseResolve<T>, reject: PromiseResolve<E> } => {
   let resolve
   let reject
   const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
   return { resolve, reject, promise } as any
 }
 
-export const noop = () => {/* noop */}
+const makePseudoDeferred = <T = any, E = any>(r = {}): { promise: any, resolve: any, reject: any } => {
+  return {
+    promise: r as any,
+    resolve: identity,
+    reject(e: any) {
+      throw e
+    }
+  }
+}
 
-export const identity = <T>(v: T): T => v
+const noop = () => {/* noop */}
+
+const identity = <T>(v: T): T => v

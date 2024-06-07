@@ -7,7 +7,7 @@
 * [x] CJS and ESM package entry points
 * [x] `table-parser` replaced with `@webpod/ingrid` to handle some issues: [neekey/ps#76](https://github.com/neekey/ps/issues/76), [neekey/ps#62](https://github.com/neekey/ps/issues/62), [neekey/table-parser#11](https://github.com/neekey/table-parser/issues/11), [neekey/table-parser#18](https://github.com/neekey/table-parser/issues/18)
 * [x] Provides promisified responses
-* [ ] Brings sync API
+* [x] Brings sync API
 * [x] Builds a process tree
 
 ## Install
@@ -44,6 +44,9 @@ lookup({pid: 12345}, (err, list) => {
     console.log('No such process found!')
   }
 })
+
+// or syncronously
+const _list = lookup.sync({pid: 12345})
 ```
 
 Define a query opts to filter the results by `command` and/or `arguments` predicates:
@@ -109,6 +112,9 @@ const children = await tree({pid: 123, recursive: true})
   {pid: 130, ppid: 125},
 ] 
 */
+
+// or syncronously
+const list = tree.sync({pid: 123, recursive: true}) 
 ```
 
 ### kill()
