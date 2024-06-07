@@ -172,7 +172,8 @@ const _tree = ({
   if (typeof opts === 'string' || typeof opts === 'number') {
     return _tree({opts: {pid: opts}, cb, sync})
   }
-  const handle = (all: TPsLookupEntry[]) => {
+  const onError = (err: any) => cb(err)
+  const onData = (all: TPsLookupEntry[]) => {
     if (opts === undefined) return all
 
     const {pid, recursive = false} = opts
@@ -184,10 +185,15 @@ const _tree = ({
 
   try {
     const all = _lookup({sync})
-    return sync ? handle(all) : all.then(handle)
+    return sync
+      ? onData(all)
+      : all.then(onData, (err: any) => {
+        onError(err)
+        throw err
+      })
   } catch (err) {
-    cb(err)
-    throw err
+    onError(err)
+    return Promise.reject(err)
   }
 }
 
