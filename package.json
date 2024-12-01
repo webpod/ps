@@ -7,6 +7,8 @@
   },
   "type": "module",
   "main": "target/cjs/index.cjs",
+  "module": "target/esm/index.mjs",
+  "types": "target/dts/index.d.ts",
   "exports": {
     ".": {
       "types": "./target/dts/index.d.ts",
