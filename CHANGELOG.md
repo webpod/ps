@@ -1,3 +1,8 @@
+## [0.1.0](https://github.com/webpod/ps/compare/v0.0.1...v0.1.0) (2025-01-29)
+
+### Features
+* feat: minor code impr, tech release ([90295f7](https://github.com/webpod/ps/commit/90295f79d8aed0d803c102c8f55ac3130eab1247))
+
 ## [0.0.1](https://github.com/webpod/ps/compare/undefined...v0.0.1) (2025-01-29)
 
 ### Fixes & improvements
