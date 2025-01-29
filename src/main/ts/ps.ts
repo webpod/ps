@@ -4,7 +4,7 @@ import { EOL as SystemEOL } from 'node:os'
 import { parse, TIngridResponse } from '@webpod/ingrid'
 import { exec, TSpawnCtx } from 'zurk/spawn'
 
-const EOL = /(\r\n)|(\n\r)|\n|\r/
+const EOL = /\n\r?|\r\n?/
 const IS_WIN = process.platform === 'win32'
 const isBin = (f: string): boolean => {
   if (f === '') return false
@@ -108,9 +108,9 @@ const _lookup = ({
     : {
       cmd: 'ps',
       args,
-      run(cb) {cb()},
-      sync,
       callback,
+      sync,
+      run(cb) {cb()},
     }
 
   exec(ctx)
@@ -119,8 +119,6 @@ const _lookup = ({
 }
 
 export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => {
-  type TFilterKeys = keyof Pick<TPsLookupQuery, 'command' | 'arguments'| 'ppid'>
-
   const processList = parseGrid(output.trim())
   const pidList= (query.pid === undefined ? [] : [query.pid].flat(1)).map(v => v + '')
   const filters: Array<(p: TPsLookupEntry) => boolean> = [
@@ -137,14 +135,16 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
 export const extractWmic = (stdout: string): string => {
   const _stdout = stdout.split(EOL)
   // Find the line index for the titles
-  const beginRow = _stdout.findIndex(out => out?.indexOf('CommandLine') === 0)
+  // const beginRow = _stdout.findIndex(out => out?.indexOf('CommandLine') === 0)
+  const beginRow = _stdout.findIndex(out => out.startsWith('CommandLine'))
 
   // get rid of the start (copyright) and the end (current pwd)
   // eslint-disable-next-line unicorn/prefer-negative-index
-  _stdout.splice(_stdout.length - 1, 1)
-  _stdout.splice(0, beginRow)
+  // _stdout.splice(_stdout.length - 1, 1)
+  // _stdout.splice(0, beginRow)
+  // return _stdout.join(SystemEOL)
 
-  return _stdout.join(SystemEOL)
+  return _stdout.slice(beginRow + 1, -1).join(SystemEOL)
 }
 
 export type TPsTreeOpts = {
@@ -310,22 +310,23 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
 
 export type PromiseResolve<T = any> = (value?: T | PromiseLike<T>) => void
 
-const makeDeferred = <T = any, E = any>(): { promise: Promise<T>, resolve: PromiseResolve<T>, reject: PromiseResolve<E> } => {
+type Deferred<T, E> = { promise: Promise<T>, resolve: PromiseResolve<T>, reject: PromiseResolve<E> }
+
+const makeDeferred = <T = any, E = any>(): Deferred<T, E> => {
   let resolve
   let reject
   const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
   return { resolve, reject, promise } as any
 }
 
-const makePseudoDeferred = <T = any, E = any>(r = {}): { promise: any, resolve: any, reject: any } => {
-  return {
+const makePseudoDeferred = <T = any, E = any>(r = {}): Deferred<any, E> =>
+  ({
     promise: r as any,
     resolve: identity,
     reject(e: any) {
       throw e
     }
-  }
-}
+  })
 
 const noop = () => {/* noop */}
 

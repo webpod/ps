@@ -3,7 +3,7 @@ import { describe, it, before, after } from 'node:test'
 import process from 'node:process'
 import * as cp from 'node:child_process'
 import * as path from 'node:path'
-import { kill, lookup, lookupSync, tree, treeSync } from '../../main/ts/ps.ts'
+import { kill, lookup, lookupSync, tree, treeSync, extractWmic } from '../../main/ts/ps.ts'
 
 const __dirname = new URL('.', import.meta.url).pathname
 const marker = Math.random().toString(16).slice(2)
@@ -132,5 +132,22 @@ describe('treeSync()', () => {
     assert.equal(list.length, 3)
 
     assert.equal((await lookup({ arguments: marker })).length, 0)
+  })
+})
+
+describe('extractWmic()', () => {
+  it('extracts wmic output', () => {
+    const input = `CommandLine
+ParentProcessId  ProcessId
+0                0
+                                                          7548             1400
+"C:\\Windows\\System32\\Wbem\\WMIC.exe" process get ProcessId,ParentProcessId,CommandLine
+                                                          1400             17424
+
+PS C:\\Users\\user>`
+
+    const sliced = extractWmic(input)
+
+    assert.equal(input.slice('CommandLine'.length + 1, -'PS C:\\Users\\user>'.length -1), sliced)
   })
 })
