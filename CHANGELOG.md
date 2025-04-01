@@ -1,3 +1,8 @@
+## [0.1.1](https://github.com/webpod/ps/compare/v0.1.0...v0.1.1) (2025-04-01)
+
+### Fixes & improvements
+* perf: up deps ([1ca66a9](https://github.com/webpod/ps/commit/1ca66a999ae5082a4ac2fe1caebd133e83886164))
+
 ## [0.1.0](https://github.com/webpod/ps/compare/v0.0.1...v0.1.0) (2025-01-29)
 
 ### Features

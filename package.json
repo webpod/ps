@@ -1,6 +1,6 @@
 {
   "name": "@webpod/ps",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A process lookup utility",
   "publishConfig": {
     "access": "public"
