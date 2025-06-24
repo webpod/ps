@@ -46,13 +46,11 @@ export type TPsNext = (err?: any, data?: any) => void
  * @param {String} query.command RegExp String
  * @param {String} query.arguments RegExp String
  * @param {String|String[]} query.psargs
- * @param {Function} [cb]
- * @param {Object=null} cb.err
- * @param {TPsLookupEntry[]} cb.processList
+ * @param {TPsLookupCallback} cb
  * @return {Promise<TPsLookupEntry[]>}
  */
 export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> =>
-  _lookup({query, cb, sync: false})
+  _lookup({query, cb, sync: false}) as Promise<TPsLookupEntry[]>
 
 /**
  * Looks up the process list synchronously
@@ -61,9 +59,7 @@ export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop)
  * @param {String} query.command RegExp String
  * @param {String} query.arguments RegExp String
  * @param {String|String[]} query.psargs
- * @param {Function} [cb]
- * @param {Object=null} cb.err
- * @param {Object[]} cb.processList
+ * @param {lookupCallback} cb
  * @return {TPsLookupEntry[]}
  */
 export const lookupSync = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop): TPsLookupEntry[] =>
@@ -84,16 +80,15 @@ const _lookup = ({
   const { promise, resolve, reject } = pFactory()
   const { psargs = ['-lx'] } = query // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
   const args = Array.isArray(psargs) ? psargs : psargs.split(/\s+/)
+  const result: TPsLookupEntry[] = []
   const extract = IS_WIN ? extractWmic : identity
-
-  let result: TPsLookupEntry[] = []
   const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
     if (err) {
       reject(err)
       cb(err)
       return
     }
-    result = parseProcessList(extract(stdout), query)
+    result.push(...parseProcessList(extract(stdout), query))
     resolve(result)
     cb(null, result)
   }
@@ -168,7 +163,7 @@ const _tree = ({
   opts?: string | number | TPsTreeOpts | undefined
   cb?: TPsLookupCallback
   sync?: boolean
-}): any => {
+}) => {
   if (typeof opts === 'string' || typeof opts === 'number') {
     return _tree({opts: {pid: opts}, cb, sync})
   }
@@ -187,7 +182,7 @@ const _tree = ({
     const all = _lookup({sync})
     return sync
       ? onData(all)
-      : all.then(onData, (err: any) => {
+      : (all as Promise<TPsLookupEntry[]>).then(onData, (err: any) => {
         onError(err)
         throw err
       })
@@ -201,7 +196,7 @@ export const tree = async (opts?: string | number | TPsTreeOpts | undefined, cb?
   _tree({opts, cb})
 
 export const treeSync = (opts?: string | number | TPsTreeOpts | undefined, cb?: TPsLookupCallback): TPsLookupEntry[] =>
-  _tree({opts, cb, sync: true})
+  _tree({opts, cb, sync: true}) as TPsLookupEntry[]
 
 tree.sync = treeSync
 
@@ -316,17 +311,17 @@ const makeDeferred = <T = any, E = any>(): Deferred<T, E> => {
   let resolve
   let reject
   const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
-  return { resolve, reject, promise } as any
+  return { resolve, reject, promise } as unknown as Deferred<T, E>
 }
 
-const makePseudoDeferred = <T = any, E = any>(r = {}): Deferred<any, E> =>
+const makePseudoDeferred = <T = any, E = any>(r = {}): Deferred<T, E>=>
   ({
     promise: r as any,
     resolve: identity,
     reject(e: any) {
       throw e
     }
-  })
+  }) as Deferred<T, E>
 
 const noop = () => {/* noop */}
 
