@@ -162,10 +162,16 @@ describe('test', function () {
   });
 
   describe('#kill() timeout: ', function () {
+    var clock;
+    before(() => {
+      clock = Sinon.useFakeTimers();
+    })
+    after(() => {
+      clock.restore();
+    })
+
     it('it should timeout after 30secs by default if the killing is not successful', function(done) {
       mockKill();
-
-      var clock = Sinon.useFakeTimers();
       var killStartDate = Date.now();
 
       PS.lookup({pid}, function (err, list) {
@@ -185,8 +191,6 @@ describe('test', function () {
 
     it('it should be able to set option to set the timeout', function(done) {
       mockKill();
-
-      var clock = Sinon.useFakeTimers();
       var killStartDate = Date.now();
       PS.lookup({pid: pid}, function (err, list) {
         assert.equal(list.length, 1);
@@ -195,7 +199,7 @@ describe('test', function () {
           assert.equal(err.message.indexOf('timeout') >= 0, true);
           restoreKill();
           PS.kill(pid, function(){
-            clock.restore();
+            Sinon.useFakeTimers
             done();
           });
         });
