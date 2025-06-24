@@ -6,6 +6,7 @@ import { exec, TSpawnCtx } from 'zurk/spawn'
 
 const EOL = /\n\r?|\r\n?/
 const IS_WIN = process.platform === 'win32'
+const WMIC_INPUT = 'wmic process get ProcessId,ParentProcessId,CommandLine' + SystemEOL
 const isBin = (f: string): boolean => {
   if (f === '') return false
   if (!f.includes('/')) return true
@@ -59,7 +60,7 @@ export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop)
  * @param {String} query.command RegExp String
  * @param {String} query.arguments RegExp String
  * @param {String|String[]} query.psargs
- * @param {lookupCallback} cb
+ * @param {TPsLookupCallback} cb
  * @return {TPsLookupEntry[]}
  */
 export const lookupSync = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop): TPsLookupEntry[] =>
@@ -81,7 +82,7 @@ const _lookup = ({
   const { psargs = ['-lx'] } = query // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
   const args = Array.isArray(psargs) ? psargs : psargs.split(/\s+/)
   const result: TPsLookupEntry[] = []
-  const extract = IS_WIN ? extractWmic : identity
+  const extract = IS_WIN ? removeWmicPrefix : identity
   const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
     if (err) {
       reject(err)
@@ -95,7 +96,7 @@ const _lookup = ({
   const ctx: TSpawnCtx = IS_WIN
     ? {
       cmd: 'cmd',
-      input: 'wmic process get ProcessId,ParentProcessId,CommandLine \n',
+      input: `wmic process get ProcessId,ParentProcessId,CommandLine ${SystemEOL}`,
       callback,
       sync,
       run(cb) {cb()}
@@ -127,19 +128,12 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
   )
 }
 
-export const extractWmic = (stdout: string): string => {
-  const _stdout = stdout.split(EOL)
-  // Find the line index for the titles
-  // const beginRow = _stdout.findIndex(out => out?.indexOf('CommandLine') === 0)
-  const beginRow = _stdout.findIndex(out => out.startsWith('CommandLine'))
-
-  // get rid of the start (copyright) and the end (current pwd)
-  // eslint-disable-next-line unicorn/prefer-negative-index
-  // _stdout.splice(_stdout.length - 1, 1)
-  // _stdout.splice(0, beginRow)
-  // return _stdout.join(SystemEOL)
-
-  return _stdout.slice(beginRow + 1, -1).join(SystemEOL)
+export const removeWmicPrefix = (stdout: string): string => {
+  const s = stdout.indexOf(WMIC_INPUT)
+  const e = stdout.lastIndexOf(SystemEOL)
+  return (s > 0
+    ? stdout.slice(s + WMIC_INPUT.length, e)
+    : stdout.slice(0, e)).trim()
 }
 
 export type TPsTreeOpts = {

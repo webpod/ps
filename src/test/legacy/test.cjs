@@ -1,12 +1,12 @@
 // Inlined as is from the upstream to verify the backward compatibility
 // https://github.com/neekey/ps/tree/master/test
 
-var CP = require('node:child_process');
+var cp = require('node:child_process');
 var assert = require('node:assert');
 var Path = require('node:path');
 var Sinon = require('sinon');
 
-var PS = require('@webpod/ps');
+var ps = require('@webpod/ps');
 
 var serverPath = Path.resolve(__dirname, './node_process_for_test.cjs');
 var UpperCaseArg = '--UPPER_CASE';
@@ -14,7 +14,7 @@ var child = null;
 var pid = null;
 
 function startProcess() {
-  child = CP.fork(serverPath, [UpperCaseArg]);
+  child = cp.fork(serverPath, [UpperCaseArg]);
   pid = child.pid;
 }
 
@@ -36,12 +36,12 @@ function restoreKill() {
 
 describe('test', function () {
   before(function (done) {
-    PS.lookup({arguments: 'node_process_for_test'}, function (err, list) {
+    ps.lookup({arguments: 'node_process_for_test'}, function (err, list) {
       var processLen = list.length;
       var killedCount = 0;
       if (processLen) {
         list.forEach(function (item) {
-          PS.kill(item.pid, function () {
+          ps.kill(item.pid, function () {
             killedCount++;
             if (killedCount === processLen) {
               done();
@@ -61,7 +61,7 @@ describe('test', function () {
     afterEach(killProcess);
 
     it('by id', function (done) {
-      PS.lookup({pid: pid}, function (err, list) {
+      ps.lookup({pid: pid}, function (err, list) {
         assert.equal(list.length, 1);
         assert.equal(list[0].arguments[0], serverPath);
 
@@ -70,7 +70,7 @@ describe('test', function () {
     });
 
     it('by command & arguments', function (done) {
-      PS.lookup({command: '.*(node|iojs).*', arguments: 'node_process_for_test'}, function (err, list) {
+      ps.lookup({command: '.*(node|iojs).*', arguments: 'node_process_for_test'}, function (err, list) {
         assert.equal(list.length, 1);
         assert.equal(list[0].pid, pid);
         assert.equal(list[0].arguments[0], serverPath);
@@ -79,12 +79,12 @@ describe('test', function () {
     });
 
     it('by arguments, the matching should be case insensitive ', function (done) {
-      PS.lookup({arguments: 'UPPER_CASE'}, function (err, list) {
+      ps.lookup({arguments: 'UPPER_CASE'}, function (err, list) {
         assert.equal(list.length, 1);
         assert.equal(list[0].pid, pid);
         assert.equal(list[0].arguments[0], serverPath);
 
-        PS.lookup({arguments: 'upper_case'}, function (err, list) {
+        ps.lookup({arguments: 'upper_case'}, function (err, list) {
           assert.equal(list.length, 1);
           assert.equal(list[0].pid, pid);
           assert.equal(list[0].arguments[0], serverPath);
@@ -94,14 +94,14 @@ describe('test', function () {
     });
 
     it('empty result list should be safe ', function (done) {
-      PS.lookup({command: 'NOT_EXIST', psargs: 'l'}, function (err, list) {
+      ps.lookup({command: 'NOT_EXIST', psargs: 'l'}, function (err, list) {
         assert.equal(list.length, 0);
         done();
       });
     });
 
     it('should work correctly with options `aux`', function (done) {
-      PS.lookup({command: 'node', psargs: 'aux'}, function (err, list) {
+      ps.lookup({command: 'node', psargs: 'aux'}, function (err, list) {
         assert.equal(list.length > 0, true);
         list.forEach(function (row) {
           assert.equal(/^\d+$/.test(row.pid), true);
@@ -114,11 +114,11 @@ describe('test', function () {
   describe('#kill()', function () {
 
     it('kill', function (done) {
-      PS.lookup({pid}, function (err, list) {
+      ps.lookup({pid}, function (err, list) {
         assert.equal(list.length, 1);
-        PS.kill(pid, function (err) {
+        ps.kill(pid, function (err) {
           assert.equal(err, null);
-          PS.lookup({pid: pid}, function (err, list) {
+          ps.lookup({pid: pid}, function (err, list) {
             assert.equal(list.length, 0);
             done();
           });
@@ -128,19 +128,19 @@ describe('test', function () {
 
     it('should not throw an exception if the callback is undefined', function (done) {
       assert.doesNotThrow(function () {
-        PS.kill(pid);
-        PS.kill(pid, function() {
+        ps.kill(pid);
+        ps.kill(pid, function() {
           done();
         });
       });
     });
 
     it('should force kill when opts.signal is SIGKILL', function (done) {
-      PS.lookup({pid: pid}, function (err, list) {
+      ps.lookup({pid: pid}, function (err, list) {
         assert.equal(list.length, 1);
-        PS.kill(pid, {signal: 'SIGKILL'}, function (err) {
+        ps.kill(pid, {signal: 'SIGKILL'}, function (err) {
           assert.equal(err, null);
-          PS.lookup({pid: pid}, function (err, list) {
+          ps.lookup({pid: pid}, function (err, list) {
             assert.equal(list.length, 0);
             done();
           });
@@ -149,11 +149,11 @@ describe('test', function () {
     });
 
     it('should throw error when opts.signal is invalid', function (done) {
-      PS.lookup({pid: pid}, function (err, list) {
+      ps.lookup({pid: pid}, function (err, list) {
         assert.equal(list.length, 1);
-        PS.kill(pid, {signal: 'INVALID'}, function (err) {
+        ps.kill(pid, {signal: 'INVALID'}, function (err) {
           assert.notEqual(err, null);
-          PS.kill(pid, function(){
+          ps.kill(pid, function(){
             done();
           });
         });
@@ -174,13 +174,13 @@ describe('test', function () {
       mockKill();
       var killStartDate = Date.now();
 
-      PS.lookup({pid}, function (err, list) {
+      ps.lookup({pid}, function (err, list) {
         assert.equal(list.length, 1);
-        PS.kill(pid, function (err) {
+        ps.kill(pid, function (err) {
           assert.equal(Date.now() - killStartDate >= 30 * 1000, true);
           assert.equal(err.message.indexOf('timeout') >= 0, true);
           restoreKill();
-          PS.kill(pid, function(){
+          ps.kill(pid, function(){
             clock.restore();
             done();
           });
@@ -192,13 +192,13 @@ describe('test', function () {
     it('it should be able to set option to set the timeout', function(done) {
       mockKill();
       var killStartDate = Date.now();
-      PS.lookup({pid: pid}, function (err, list) {
+      ps.lookup({pid: pid}, function (err, list) {
         assert.equal(list.length, 1);
-        PS.kill(pid, { timeout: 5 }, function (err) {
+        ps.kill(pid, { timeout: 5 }, function (err) {
           assert.equal(Date.now() - killStartDate >= 5 * 1000, true);
           assert.equal(err.message.indexOf('timeout') >= 0, true);
           restoreKill();
-          PS.kill(pid, function(){
+          ps.kill(pid, function(){
             Sinon.useFakeTimers
             done();
           });
