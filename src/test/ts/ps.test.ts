@@ -3,7 +3,7 @@ import { describe, it, before, after } from 'node:test'
 import process from 'node:process'
 import * as cp from 'node:child_process'
 import * as path from 'node:path'
-import { kill, lookup, lookupSync, tree, treeSync, extractWmic } from '../../main/ts/ps.ts'
+import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix } from '../../main/ts/ps.ts'
 
 const __dirname = new URL('.', import.meta.url).pathname
 const marker = Math.random().toString(16).slice(2)
@@ -146,8 +146,8 @@ ParentProcessId  ProcessId
 
 PS C:\\Users\\user>`
 
-    const sliced = extractWmic(input)
+    const sliced = removeWmicPrefix(input)
 
-    assert.equal(input.slice('CommandLine'.length + 1, -'PS C:\\Users\\user>'.length -1), sliced)
+    assert.equal(sliced, input.slice(0, -'PS C:\\Users\\user>'.length -1))
   })
 })
