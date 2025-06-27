@@ -1,3 +1,8 @@
+## [0.1.2](https://github.com/webpod/ps/compare/v0.1.1...v0.1.2) (2025-06-27)
+
+### Fixes & improvements
+* fix: update @webpod/ingrid to v1.0.0 ([a548fea](https://github.com/webpod/ps/commit/a548fea2dabd28fb6a08f100e1f8e5723f3d3cfb))
+
 ## [0.1.1](https://github.com/webpod/ps/compare/v0.1.0...v0.1.1) (2025-04-01)
 
 ### Fixes & improvements
