@@ -96,7 +96,7 @@ const _lookup = ({
   const ctx: TSpawnCtx = IS_WIN
     ? {
       cmd: 'cmd',
-      input: `wmic process get ProcessId,ParentProcessId,CommandLine ${SystemEOL}`,
+      input: `wmic process get ProcessId,ParentProcessId,CommandLine${SystemEOL}`,
       callback,
       sync,
       run(cb) {cb()}

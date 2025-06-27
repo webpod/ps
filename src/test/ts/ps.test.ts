@@ -146,8 +146,8 @@ ParentProcessId  ProcessId
 
 PS C:\\Users\\user>`
 
-    const sliced = removeWmicPrefix(input)
+    const sliced = removeWmicPrefix(input).trim()
 
-    assert.equal(sliced, input.slice(0, -'PS C:\\Users\\user>'.length -1))
+    assert.equal(sliced, input.slice(0, -'PS C:\\Users\\user>'.length -1).trim())
   })
 })
