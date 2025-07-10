@@ -95,8 +95,8 @@ const _lookup = ({
   }
   const ctx: TSpawnCtx = IS_WIN
     ? {
-      cmd: 'cmd',
-      input: `wmic process get ProcessId,ParentProcessId,CommandLine${SystemEOL}`,
+      cmd: 'wmic process get ProcessId,ParentProcessId,CommandLine',
+      args: [],
       callback,
       sync,
       run(cb) {cb()}
@@ -115,7 +115,7 @@ const _lookup = ({
 }
 
 export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => {
-  const processList = parseGrid(output.trim())
+  const processList = parseGrid(output)
   const pidList= (query.pid === undefined ? [] : [query.pid].flat(1)).map(v => v + '')
   const filters: Array<(p: TPsLookupEntry) => boolean> = [
     p => query.command ? new RegExp(query.command, 'i').test(p.command) : true,
@@ -130,10 +130,16 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
 
 export const removeWmicPrefix = (stdout: string): string => {
   const s = stdout.indexOf(WMIC_INPUT)
-  const e = stdout.lastIndexOf(SystemEOL)
-  return (s > 0
+  const e = stdout.includes('>')
+    ? stdout.trimEnd().lastIndexOf(SystemEOL)
+    : stdout.length
+
+  const r = (s > 0
     ? stdout.slice(s + WMIC_INPUT.length, e)
-    : stdout.slice(0, e)).trim()
+    : stdout.slice(0, e)).trimStart()
+
+  console.log('!!!', r)
+  return r
 }
 
 export type TPsTreeOpts = {
@@ -272,11 +278,13 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
 
 export const parseGrid = (output: string) =>
   output
-    ? formatOutput(parse(output, { format: IS_WIN ? 'win' : 'unix' }))
+    ? formatOutput(parse(output, { format: IS_WIN ? 'win' : 'unix', debug: IS_WIN  }))
     : []
 
-export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
-  data.reduce<TPsLookupEntry[]>((m, d) => {
+export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] => {
+  IS_WIN && console.log('data=', data)
+
+  return data.reduce<TPsLookupEntry[]>((m, d) => {
     const pid = d.PID?.[0]  || d.ProcessId?.[0]
     const ppid = d.PPID?.[0] || d.ParentProcessId?.[0]
     const cmd = d.CMD || d.CommandLine || d.COMMAND || []
@@ -287,8 +295,8 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
       const args = cmd.length > 1 ? cmd.slice(c) : []
 
       m.push({
-        pid: pid,
-        ppid: ppid,
+        pid,
+        ppid,
         command: command,
         arguments: args
       })
@@ -296,6 +304,7 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
 
     return m
   }, [])
+}
 
 export type PromiseResolve<T = any> = (value?: T | PromiseLike<T>) => void
 
