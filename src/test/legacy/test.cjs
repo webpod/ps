@@ -13,6 +13,8 @@ var UpperCaseArg = '--UPPER_CASE';
 var child = null;
 var pid = null;
 
+const { EOL : SystemEOL } = require('node:os')
+
 function startProcess() {
   child = cp.fork(serverPath, [UpperCaseArg]);
   pid = child.pid;
@@ -33,6 +35,12 @@ function mockKill() {
 function restoreKill() {
   process.kill = processKill;
 }
+
+// const fixture = cp.spawnSync('wmic process get ProcessId,ParentProcessId,CommandLine', [], { shell: true, encoding: 'utf-8', maxBuffer: 1024 * 1024 })
+// console.log('stdout', fixture.stdout)
+// const b64 = Buffer.from(fixture.stdout).toString('base64')
+// console.log('stdout size:', fixture.stdout.length)
+// console.log('fixture base64:', b64)
 
 describe('test', function () {
   before(function (done) {
@@ -59,6 +67,14 @@ describe('test', function () {
   describe('#lookup()', function () {
 
     afterEach(killProcess);
+
+    it.only('get all processes', function (done) {
+      ps.lookup({}, function (err, list) {
+        console.log(err);
+        console.log(list);
+        done();
+      });
+    })
 
     it('by id', function (done) {
       ps.lookup({pid: pid}, function (err, list) {
