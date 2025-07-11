@@ -1,3 +1,9 @@
+## [0.1.3](https://github.com/webpod/ps/compare/v0.1.2...v0.1.3) (2025-07-11)
+
+### Fixes & improvements
+* fix: enhance bin search ([c7acafc](https://github.com/webpod/ps/commit/c7acafc3394b76320e6f5abd4c1de67aa2e07262))
+* fix: update @webpod/ingrid to v1.1.1 ([e5d0285](https://github.com/webpod/ps/commit/e5d02851c86745d4be097be0db8502427fa8f221))
+
 ## [0.1.2](https://github.com/webpod/ps/compare/v0.1.1...v0.1.2) (2025-06-27)
 
 ### Fixes & improvements
