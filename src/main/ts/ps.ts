@@ -4,9 +4,8 @@ import { EOL as SystemEOL } from 'node:os'
 import { parse, TIngridResponse } from '@webpod/ingrid'
 import { exec, TSpawnCtx } from 'zurk/spawn'
 
-const EOL = /\n\r?|\r\n?/
 const IS_WIN = process.platform === 'win32'
-const WMIC_INPUT = 'wmic process get ProcessId,ParentProcessId,CommandLine' + SystemEOL
+const WMIC_INPUT = 'wmic process get ProcessId,ParentProcessId,CommandLine'
 const  isBin = (f: string): boolean => {
   if (f === '') return false
   if (!f.includes('/')) return true
@@ -100,7 +99,7 @@ const _lookup = ({
   }
   const ctx: TSpawnCtx = IS_WIN
     ? {
-      cmd: 'wmic process get ProcessId,ParentProcessId,CommandLine',
+      cmd: WMIC_INPUT,
       args: [],
       callback,
       sync,
@@ -134,7 +133,7 @@ export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => 
 }
 
 export const removeWmicPrefix = (stdout: string): string => {
-  const s = stdout.indexOf(WMIC_INPUT)
+  const s = stdout.indexOf(WMIC_INPUT + SystemEOL)
   const e = stdout.includes('>')
     ? stdout.trimEnd().lastIndexOf(SystemEOL)
     : stdout.length
@@ -279,13 +278,11 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
 
 export const parseGrid = (output: string) =>
   output
-    ? formatOutput(parse(output, { format: IS_WIN ? 'win' : 'unix', debug: IS_WIN  }))
+    ? formatOutput(parse(output, { format: IS_WIN ? 'win' : 'unix' }))
     : []
 
-export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] => {
-  IS_WIN && console.log('data=', data)
-
-  return data.reduce<TPsLookupEntry[]>((m, d) => {
+export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
+  data.reduce<TPsLookupEntry[]>((m, d) => {
     const pid = d.PID?.[0]  || d.ProcessId?.[0]
     const ppid = d.PPID?.[0] || d.ParentProcessId?.[0]
     const _cmd = d.CMD || d.CommandLine || d.COMMAND || []
@@ -306,7 +303,6 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] => {
 
     return m
   }, [])
-}
 
 export type PromiseResolve<T = any> = (value?: T | PromiseLike<T>) => void
 

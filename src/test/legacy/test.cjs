@@ -36,12 +36,6 @@ function restoreKill() {
   process.kill = processKill;
 }
 
-// const fixture = cp.spawnSync('wmic process get ProcessId,ParentProcessId,CommandLine', [], { shell: true, encoding: 'utf-8', maxBuffer: 1024 * 1024 })
-// console.log('stdout', fixture.stdout)
-// const b64 = Buffer.from(fixture.stdout).toString('base64')
-// console.log('stdout size:', fixture.stdout.length)
-// console.log('fixture base64:', b64)
-
 describe('test', function () {
   before(function (done) {
     ps.lookup({arguments: 'node_process_for_test'}, function (err, list) {
@@ -68,10 +62,10 @@ describe('test', function () {
 
     afterEach(killProcess);
 
-    it.only('get all processes', function (done) {
+    it('get all processes', function (done) {
       ps.lookup({}, function (err, list) {
-        console.log(err);
-        console.log(list);
+        assert.equal(err, null);
+        assert.equal(list.length > 10, true);
         done();
       });
     })
