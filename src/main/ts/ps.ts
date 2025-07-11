@@ -7,9 +7,14 @@ import { exec, TSpawnCtx } from 'zurk/spawn'
 const EOL = /\n\r?|\r\n?/
 const IS_WIN = process.platform === 'win32'
 const WMIC_INPUT = 'wmic process get ProcessId,ParentProcessId,CommandLine' + SystemEOL
-const isBin = (f: string): boolean => {
+const  isBin = (f: string): boolean => {
   if (f === '') return false
   if (!f.includes('/')) return true
+  if (!f.includes('\\')) return true
+  if (f.length > 3 && f[0] === '"')
+    return f[f.length - 1] === '"'
+      ? isBin(f.slice(1, -1))
+      : false
   if (!fs.existsSync(f)) return false
 
   const stat = fs.lstatSync(f)
@@ -133,13 +138,9 @@ export const removeWmicPrefix = (stdout: string): string => {
   const e = stdout.includes('>')
     ? stdout.trimEnd().lastIndexOf(SystemEOL)
     : stdout.length
-
-  const r = (s > 0
+  return (s > 0
     ? stdout.slice(s + WMIC_INPUT.length, e)
     : stdout.slice(0, e)).trimStart()
-
-  console.log('!!!', r)
-  return r
 }
 
 export type TPsTreeOpts = {
@@ -287,7 +288,8 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] => {
   return data.reduce<TPsLookupEntry[]>((m, d) => {
     const pid = d.PID?.[0]  || d.ProcessId?.[0]
     const ppid = d.PPID?.[0] || d.ParentProcessId?.[0]
-    const cmd = d.CMD || d.CommandLine || d.COMMAND || []
+    const _cmd = d.CMD || d.CommandLine || d.COMMAND || []
+    const cmd = _cmd.length === 1 ? _cmd[0].split(/\s+/) : _cmd
 
     if (pid && cmd.length > 0) {
       const c = (cmd.findIndex((_v, i) => isBin(cmd.slice(0, i).join(' '))))
