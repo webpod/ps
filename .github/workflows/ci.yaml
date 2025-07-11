@@ -87,10 +87,10 @@ jobs:
 
       - name: Run win32 tests
         if: matrix.os == 'windows-latest'
+        timeout-minutes: 2
         run: npm run test:legacy
 #        run: |
 #          wmic process get ProcessId,ParentProcessId,CommandLine
-        timeout-minutes: 2
 
 #      - name: wmic via node
 #        if: matrix.os == 'windows-latest'
