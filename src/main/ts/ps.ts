@@ -8,16 +8,18 @@ const IS_WIN = process.platform === 'win32'
 const WMIC_INPUT = 'wmic process get ProcessId,ParentProcessId,CommandLine'
 const  isBin = (f: string): boolean => {
   if (f === '') return false
-  if (!f.includes('/')) return true
-  if (!f.includes('\\')) return true
+  if (!f.includes('/') && !f.includes('\\')) return true
   if (f.length > 3 && f[0] === '"')
     return f[f.length - 1] === '"'
       ? isBin(f.slice(1, -1))
       : false
-  if (!fs.existsSync(f)) return false
-
-  const stat = fs.lstatSync(f)
-  return stat.isFile() || stat.isSymbolicLink()
+  try {
+    if (!fs.existsSync(f)) return false
+    const stat = fs.lstatSync(f)
+    return stat.isFile() || stat.isSymbolicLink()
+  } catch {
+    return false
+  }
 }
 
 export type TPsLookupCallback = (err: any, processList?: TPsLookupEntry[]) => void
@@ -290,8 +292,8 @@ export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
 
     if (pid && cmd.length > 0) {
       const c = (cmd.findIndex((_v, i) => isBin(cmd.slice(0, i).join(' '))))
-      const command = cmd.slice(0, c).join(' ')
-      const args = cmd.length > 1 ? cmd.slice(c) : []
+      const command = (c === -1 ? cmd: cmd.slice(0, c)).join(' ')
+      const args = c === -1 ? [] : cmd.slice(c)
 
       m.push({
         pid,

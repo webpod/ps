@@ -73,7 +73,7 @@ describe('test', function () {
     it('by id', function (done) {
       ps.lookup({pid: pid}, function (err, list) {
         assert.equal(list.length, 1);
-        assert.equal(list[0].arguments[0], serverPath);
+        assert.ok(list[0].arguments.includes(serverPath));
 
         done();
       });
@@ -81,9 +81,10 @@ describe('test', function () {
 
     it('by command & arguments', function (done) {
       ps.lookup({command: '.*(node|iojs).*', arguments: 'node_process_for_test'}, function (err, list) {
+        const [found] = list
         assert.equal(list.length, 1);
-        assert.equal(list[0].pid, pid);
-        assert.equal(list[0].arguments[0], serverPath);
+        assert.equal(found.pid, pid);
+        assert.ok(found.arguments.includes(serverPath));
         done();
       });
     });
