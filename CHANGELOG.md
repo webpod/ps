@@ -1,3 +1,8 @@
+## [0.1.4](https://github.com/webpod/ps/compare/v0.1.3...v0.1.4) (2025-07-13)
+
+### Fixes & improvements
+* fix: handle perm errors on bin resolver ([123733b](https://github.com/webpod/ps/commit/123733b7ed2dfc445881378e36f0b2e7ac09a9bc))
+
 ## [0.1.3](https://github.com/webpod/ps/compare/v0.1.2...v0.1.3) (2025-07-11)
 
 ### Fixes & improvements
