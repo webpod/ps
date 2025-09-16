@@ -82,7 +82,7 @@ jobs:
         run: npm run build
 
       - name: Run all tests
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-latest'
         run: npm run test
 
       - name: Run win32 tests
