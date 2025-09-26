@@ -1,34 +1,48 @@
 import process from 'node:process'
 import fs from 'node:fs'
-import { EOL as SystemEOL } from 'node:os'
+import os from 'node:os'
 import { parse, TIngridResponse } from '@webpod/ingrid'
 import { exec, TSpawnCtx } from 'zurk/spawn'
 
 const IS_WIN = process.platform === 'win32'
-const WMIC_INPUT = 'wmic process get ProcessId,ParentProcessId,CommandLine'
+const IS_WIN2025_PLUS = IS_WIN && Number.parseInt(os.release().split('.')[2], 10) >= 26_000 // WMIC will be missing in Windows 11 25H2 (kernel >= 26000)
 const LOOKUPS: Record<string, {
   cmd: string,
   args?: string[],
-  parse: (stdout: string) => TPsLookupEntry[]
+  parse: (stdout: string) => TIngridResponse
 }> = {
   wmic: {
-    cmd: WMIC_INPUT,
+    cmd: 'wmic process get ProcessId,ParentProcessId,CommandLine',
+    args: [],
     parse(stdout: string) {
-      return normalizeOutput(parse(removeWmicPrefix(stdout), { format: 'win' }))
+      return parse(removeWmicPrefix(stdout), { format: 'win' })
     }
   },
   ps: {
     cmd: 'ps',
+    args: ['-lx'],
     parse(stdout: string) {
-      return normalizeOutput(parse(stdout, { format: 'unix' }))
+      return parse(stdout, { format: 'unix' })
     }
   },
-  // pwsh: {
-  //   cmd: 'pwsh',
-  //   parse(stdout: string) {
-  //
-  //   }
-  // },
+  pwsh: {
+    cmd: 'powershell',
+    args: ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress'],
+    parse(stdout: string) {
+      let arr: any[] = []
+      try {
+        arr = JSON.parse(stdout)
+      } catch {
+        return []
+      }
+      // Reshape into Ingrid-like objects for normalizeOutput
+      return arr.map(p => ({
+        ProcessId: [p.ProcessId],
+        ParentProcessId: [p.ParentProcessId],
+        CommandLine: p.CommandLine ? [p.CommandLine] : [],
+      }))
+    },
+  },
 }
 
 const  isBin = (f: string): boolean => {
@@ -61,7 +75,6 @@ export type TPsLookupQuery = {
   command?: string
   arguments?: string
   ppid?: number | string
-  psargs?: string | string[]
 }
 
 export type TPsKillOptions = {
@@ -110,17 +123,20 @@ const _lookup = ({
   }) => {
   const pFactory = sync ? makePseudoDeferred.bind(null, []) : makeDeferred
   const { promise, resolve, reject } = pFactory()
-  const { psargs = ['-lx'] } = query // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
   const result: TPsLookupEntry[] = []
-  const args = IS_WIN ? [] : Array.isArray(psargs) ? psargs : psargs.split(/\s+/)
-  const { parse, cmd } = IS_WIN ? LOOKUPS.wmic : LOOKUPS.ps
+  const lookupFlow = IS_WIN ? (IS_WIN2025_PLUS ? 'pwsh' : 'wmic') : 'ps'
+  const {
+    parse,
+    cmd,
+    args
+  } = LOOKUPS[lookupFlow]
   const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
     if (err) {
       reject(err)
       cb(err)
       return
     }
-    result.push(...filterProcessList(parse(stdout), query))
+    result.push(...filterProcessList(normalizeOutput(parse(stdout)), query))
     resolve(result)
     cb(null, result)
   }
@@ -150,12 +166,12 @@ export const filterProcessList = (processList: TPsLookupEntry[], query: TPsLooku
 }
 
 export const removeWmicPrefix = (stdout: string): string => {
-  const s = stdout.indexOf(WMIC_INPUT + SystemEOL)
+  const s = stdout.indexOf(LOOKUPS.wmic.cmd + os.EOL)
   const e = stdout.includes('>')
-    ? stdout.trimEnd().lastIndexOf(SystemEOL)
+    ? stdout.trimEnd().lastIndexOf(os.EOL)
     : stdout.length
   return (s > 0
-    ? stdout.slice(s + WMIC_INPUT.length, e)
+    ? stdout.slice(s + LOOKUPS.wmic.cmd.length, e)
     : stdout.slice(0, e)).trimStart()
 }
 
