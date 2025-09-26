@@ -94,6 +94,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_PROVENANCE: true
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: 'x-access-token'
           GIT_BRANCH: 'main'
           GIT_AUTHOR_NAME: ${{ vars.GIT_AUTHOR_NAME }}
           GIT_AUTHOR_EMAIL: ${{ vars.GIT_AUTHOR_EMAIL }}
