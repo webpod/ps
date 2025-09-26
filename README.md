@@ -8,7 +8,7 @@
 * [x] `table-parser` replaced with `@webpod/ingrid` to handle some issues: [neekey/ps#76](https://github.com/neekey/ps/issues/76), [neekey/ps#62](https://github.com/neekey/ps/issues/62), [neekey/table-parser#11](https://github.com/neekey/table-parser/issues/11), [neekey/table-parser#18](https://github.com/neekey/table-parser/issues/18)
 * [x] Provides promisified responses
 * [x] Brings sync API
-* [x] Builds a process tree
+* [x] Builds a process subtree by parent
 
 ## Install
 ```bash
@@ -16,10 +16,13 @@ $ npm install @webpod/ps
 ```
 
 ## Internals
-This module invokes different tools to get process list:
+This module uses different approaches for getting process list:
 
-* `ps` for unix/mac: `ps -lx`
-* [`wmic` for win runtimes](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmic): `wmic process get ProcessId,CommandLine`.
+| Platform                 | Method                                                                                                                                        |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| Unix/Mac                 | `ps -lx`                                                                                                                                      |
+| Windows (kernel >= 26000)| `pwsh -NoProfile -Command "Get-CimInstance Win32_Process \| Select-Object ProcessId,ParentProcessId,CommandLine \| ConvertTo-Json -Compress"` |
+| Windows (kernel < 26000) | [`wmic`](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmic) `process get ProcessId,CommandLine`                                     |
 
 ## Usage
 
