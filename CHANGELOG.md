@@ -1,3 +1,11 @@
+## [1.0.0](https://github.com/webpod/ps/compare/v0.1.4...v1.0.0) (2025-09-26)
+
+### Features
+* feat: support win2025 flow (#15) ([f199620](https://github.com/webpod/ps/commit/f1996203d9e1ff1d8609e8e43152ecddebe08913))
+
+### BREAKING CHANGES
+* win-2025 uses `pwsh` to obtain process list tree instead of `wmic` ([f199620](https://github.com/webpod/ps/commit/f1996203d9e1ff1d8609e8e43152ecddebe08913))
+
 ## [0.1.4](https://github.com/webpod/ps/compare/v0.1.3...v0.1.4) (2025-07-13)
 
 ### Fixes & improvements
