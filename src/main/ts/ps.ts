@@ -6,6 +6,31 @@ import { exec, TSpawnCtx } from 'zurk/spawn'
 
 const IS_WIN = process.platform === 'win32'
 const WMIC_INPUT = 'wmic process get ProcessId,ParentProcessId,CommandLine'
+const LOOKUPS: Record<string, {
+  cmd: string,
+  args?: string[],
+  parse: (stdout: string) => TPsLookupEntry[]
+}> = {
+  wmic: {
+    cmd: WMIC_INPUT,
+    parse(stdout: string) {
+      return normalizeOutput(parse(removeWmicPrefix(stdout), { format: 'win' }))
+    }
+  },
+  ps: {
+    cmd: 'ps',
+    parse(stdout: string) {
+      return normalizeOutput(parse(stdout, { format: 'unix' }))
+    }
+  },
+  // pwsh: {
+  //   cmd: 'pwsh',
+  //   parse(stdout: string) {
+  //
+  //   }
+  // },
+}
+
 const  isBin = (f: string): boolean => {
   if (f === '') return false
   if (!f.includes('/') && !f.includes('\\')) return true
@@ -86,42 +111,32 @@ const _lookup = ({
   const pFactory = sync ? makePseudoDeferred.bind(null, []) : makeDeferred
   const { promise, resolve, reject } = pFactory()
   const { psargs = ['-lx'] } = query // add 'lx' as default ps arguments, since the default ps output in linux like "ubuntu", wont include command arguments
-  const args = Array.isArray(psargs) ? psargs : psargs.split(/\s+/)
   const result: TPsLookupEntry[] = []
-  const extract = IS_WIN ? removeWmicPrefix : identity
+  const args = IS_WIN ? [] : Array.isArray(psargs) ? psargs : psargs.split(/\s+/)
+  const { parse, cmd } = IS_WIN ? LOOKUPS.wmic : LOOKUPS.ps
   const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
     if (err) {
       reject(err)
       cb(err)
       return
     }
-    result.push(...parseProcessList(extract(stdout), query))
+    result.push(...filterProcessList(parse(stdout), query))
     resolve(result)
     cb(null, result)
   }
-  const ctx: TSpawnCtx = IS_WIN
-    ? {
-      cmd: WMIC_INPUT,
-      args: [],
-      callback,
-      sync,
-      run(cb) {cb()}
-    }
-    : {
-      cmd: 'ps',
-      args,
-      callback,
-      sync,
-      run(cb) {cb()},
-    }
 
-  exec(ctx)
+  exec({
+    cmd,
+    args,
+    callback,
+    sync,
+    run(cb) { cb() },
+  })
 
   return Object.assign(promise, result)
 }
 
-export const parseProcessList = (output: string, query: TPsLookupQuery = {}) => {
-  const processList = parseGrid(output)
+export const filterProcessList = (processList: TPsLookupEntry[], query: TPsLookupQuery = {}): TPsLookupEntry[] => {
   const pidList= (query.pid === undefined ? [] : [query.pid].flat(1)).map(v => v + '')
   const filters: Array<(p: TPsLookupEntry) => boolean> = [
     p => query.command ? new RegExp(query.command, 'i').test(p.command) : true,
@@ -280,10 +295,10 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
 
 export const parseGrid = (output: string) =>
   output
-    ? formatOutput(parse(output, { format: IS_WIN ? 'win' : 'unix' }))
+    ? normalizeOutput(parse(output, { format: IS_WIN ? 'win' : 'unix' }))
     : []
 
-export const formatOutput = (data: TIngridResponse): TPsLookupEntry[] =>
+export const normalizeOutput = (data: TIngridResponse): TPsLookupEntry[] =>
   data.reduce<TPsLookupEntry[]>((m, d) => {
     const pid = d.PID?.[0]  || d.ProcessId?.[0]
     const ppid = d.PPID?.[0] || d.ParentProcessId?.[0]
