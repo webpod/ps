@@ -136,13 +136,13 @@ jobs:
         run: npm run build
 
       - name: Run all tests
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         run: npm run test
 
       - name: Run win32 tests
-        if: matrix.os == 'windows-latest'
+        if: matrix.os != 'ubuntu-24.04'
         timeout-minutes: 2
-        run: npm run test:legacy
+        run: npm run x:test:legacy
 #        run: |
 #          wmic process get ProcessId,ParentProcessId,CommandLine
 
