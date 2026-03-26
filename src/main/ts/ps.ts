@@ -10,6 +10,7 @@ const LOOKUPS: Record<string, {
   cmd: string,
   args?: string[],
   parse: (stdout: string) => TIngridResponse
+  fallback?: string
 }> = {
   wmic: {
     cmd: 'wmic process get ProcessId,ParentProcessId,CommandLine',
@@ -21,6 +22,14 @@ const LOOKUPS: Record<string, {
   ps: {
     cmd: 'ps',
     args: ['-lx'],
+    parse(stdout: string) {
+      return parse(stdout, { format: 'unix' })
+    },
+    fallback: 'psFallback',
+  },
+  psFallback: {
+    cmd: 'ps',
+    args: ['-eo', 'pid,ppid,args'],
     parse(stdout: string) {
       return parse(stdout, { format: 'unix' })
     }
@@ -131,13 +140,35 @@ const _lookup = ({
     cmd,
     args
   } = LOOKUPS[lookupFlow]
+  const lookup = LOOKUPS[lookupFlow]
   const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
     if (err) {
       reject(err)
       cb(err)
       return
     }
-    result.push(...filterProcessList(normalizeOutput(parse(stdout)), query))
+    const parsed = filterProcessList(normalizeOutput(parse(stdout)), query)
+    if (parsed.length === 0 && lookup.fallback) {
+      const fb = LOOKUPS[lookup.fallback]
+      exec({
+        cmd: fb.cmd,
+        args: fb.args,
+        callback: (err2, {stdout: stdout2}) => {
+          if (err2) {
+            resolve(result)
+            cb(null, result)
+            return
+          }
+          result.push(...filterProcessList(normalizeOutput(fb.parse(stdout2)), query))
+          resolve(result)
+          cb(null, result)
+        },
+        sync,
+        run(cb) { cb() },
+      })
+      return
+    }
+    result.push(...parsed)
     resolve(result)
     cb(null, result)
   }
