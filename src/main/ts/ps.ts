@@ -6,6 +6,7 @@ import { exec, type TSpawnCtx } from 'zurk/spawn'
 
 const IS_WIN = process.platform === 'win32'
 const IS_WIN2025_PLUS = IS_WIN && Number.parseInt(os.release().split('.')[2], 10) >= 26_000 // WMIC will be missing in Windows 11 25H2 (kernel >= 26000)
+const IS_BUSYBOX = !IS_WIN && fs.existsSync('/bin/busybox')
 const LOOKUPS: Record<string, {
   cmd: string,
   args?: string[],
@@ -134,7 +135,7 @@ const _lookup = ({
   const pFactory = sync ? makePseudoDeferred.bind(null, []) : makeDeferred
   const { promise, resolve, reject } = pFactory()
   const result: TPsLookupEntry[] = []
-  const lookupFlow = IS_WIN ? IS_WIN2025_PLUS ? 'pwsh' : 'wmic' : 'ps'
+  const lookupFlow = IS_WIN ? IS_WIN2025_PLUS ? 'pwsh' : 'wmic' : IS_BUSYBOX ? 'psFallback' : 'ps'
   const {
     parse,
     cmd,
