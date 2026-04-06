@@ -1,3 +1,8 @@
+## [1.1.0](https://github.com/webpod/ps/compare/v1.0.0...v1.1.0) (2026-04-06)
+
+### Features
+* feat: enhance ps args scheme to extend compat range ([46f6bf0](https://github.com/webpod/ps/commit/46f6bf03464931076ca7dbec99c4ddac26a14cf0))
+
 ## [1.0.0](https://github.com/webpod/ps/compare/v0.1.4...v1.0.0) (2025-09-26)
 
 ### Features
