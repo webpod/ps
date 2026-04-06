@@ -61,6 +61,8 @@ export type TPsLookupCallback = (err: any, processList?: TPsLookupEntry[]) => vo
 export type TPsKillOptions = {
   timeout?: number
   signal?: string | number | NodeJS.Signals
+  /** Polling interval in ms between exit checks (default 200). */
+  interval?: number
 }
 
 export type TPsTreeOpts = {
@@ -170,7 +172,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
   if (typeof opts === 'string' || typeof opts === 'number') return kill(pid, { signal: opts }, next)
 
   const { promise, resolve, reject } = makeDeferred()
-  const { timeout = 30, signal = 'SIGTERM' } = opts || {}
+  const { timeout = 30, signal = 'SIGTERM', interval = 200 } = opts || {}
 
   try {
     process.kill(+pid, signal)
@@ -180,17 +182,14 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
     return promise
   }
 
-  if (!next) {
-    resolve(pid)
-    return promise
-  }
-
   let confirmCount = 0
   let timedOut = false
 
   const timer = setTimeout(() => {
     timedOut = true
-    next(new Error('Kill process timeout'))
+    const err = new Error('Kill process timeout')
+    reject(err)
+    next?.(err)
   }, timeout * 1000)
 
   const poll = () =>
@@ -199,21 +198,21 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
       if (err) {
         clearTimeout(timer)
         reject(err)
-        next(err, pid)
+        next?.(err, pid)
         return
       }
       if (list.length > 0) {
         confirmCount = Math.max(confirmCount - 1, 0)
-        poll()
+        setTimeout(poll, interval)
         return
       }
       confirmCount++
       if (confirmCount >= 5) {
         clearTimeout(timer)
         resolve(pid)
-        next(null, pid)
+        next?.(null, pid)
       } else {
-        poll()
+        setTimeout(poll, interval)
       }
     })
 
