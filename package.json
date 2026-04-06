@@ -23,12 +23,17 @@
     "build:dts": "tsc --emitDeclarationOnly --outDir target/dts",
     "build:docs": "typedoc --options src/main/typedoc",
     "build:stamp": "npx buildstamp",
-    "test": "concurrently 'npm:test:lint' 'npm:test:unit' && npm run test:legacy",
+    "test": "concurrently 'npm:test:lint' 'npm:test:unit' 'npm:test:size' && npm run test:legacy",
     "test:lint": "oxlint -c oxlintrc.json src/main/ts src/test/ts",
     "test:unit": "c8 -r lcov -r text -o target/coverage -x src/scripts -x src/test -x target node --loader ts-node/esm --experimental-specifier-resolution=node src/scripts/test.mjs",
     "test:legacy": "node ./node_modules/mocha/bin/mocha -t 0 -R spec src/test/legacy/test.cjs",
+    "test:size": "size-limit",
     "publish:draft": "npm run build && npm publish --no-git-tag-version"
   },
+  "size-limit": [
+    { "path": "target/esm/index.mjs", "limit": "4 kB" },
+    { "path": "target/cjs/index.cjs", "limit": "5 kB" }
+  ],
   "files": [
     "target/cjs",
     "target/esm",
@@ -45,17 +50,19 @@
     "zurk": "^0.11.10"
   },
   "devDependencies": {
+    "@size-limit/file": "^12.0.1",
     "@types/node": "^25.5.2",
     "c8": "^11.0.0",
     "concurrently": "^9.2.1",
     "esbuild": "^0.28.0",
     "esbuild-node-externals": "^1.21.0",
     "esbuild-plugin-entry-chunks": "^0.1.18",
-    "oxlint": "^1.58.0",
     "fast-glob": "^3.3.3",
     "minimist": "^1.2.8",
     "mocha": "^10.8.2",
+    "oxlint": "^1.58.0",
     "sinon": "^18.0.1",
+    "size-limit": "^12.0.1",
     "ts-node": "^10.9.2",
     "typedoc": "^0.28.18",
     "typescript": "^5.9.2"
