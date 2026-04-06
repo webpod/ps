@@ -1,28 +1,28 @@
 import * as assert from 'node:assert'
 import { describe, it, before, after } from 'node:test'
 import process from 'node:process'
-import * as cp from 'node:child_process'
+import { fork, execSync } from 'node:child_process'
 import * as path from 'node:path'
 import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix, normalizeOutput } from '../../main/ts/ps.ts'
 import { parse } from '@webpod/ingrid'
-import { execSync } from 'node:child_process'
 
 const __dirname = new URL('.', import.meta.url).pathname
 const marker = Math.random().toString(16).slice(2)
 const testScript = path.resolve(__dirname, '../legacy/node_process_for_test.cjs')
 const testScriptArgs = [marker, '--foo', '--bar']
+const SPAWN_DELAY = 2000
+
+const spawnChild = (...extra: string[]) =>
+  fork(testScript, [...testScriptArgs, ...extra]).pid as number
+
+const killSafe = (pid: number) => {
+  try { process.kill(pid) } catch {}
+}
 
 describe('lookup()', () => {
   let pid: number
-  before(() => {
-    pid = cp.fork(testScript, testScriptArgs).pid as number
-  })
-
-  after(() => {
-    try {
-      process.kill(pid)
-    } catch (err) { void err }
-  })
+  before(() => { pid = spawnChild() })
+  after(() => killSafe(pid))
 
   it('returns a process list', async () => {
     const list = await lookup()
@@ -31,15 +31,12 @@ describe('lookup()', () => {
 
   it('searches process by pid', async () => {
     const list = await lookup({ pid })
-    const found = list[0]
-
     assert.equal(list.length, 1)
-    assert.equal(found.pid, pid)
+    assert.equal(list[0].pid, pid)
   })
 
   it('filters by args', async () => {
     const list = await lookup({ arguments: marker })
-
     assert.equal(list.length, 1)
     assert.equal(list[0].pid, pid)
   })
@@ -47,20 +44,13 @@ describe('lookup()', () => {
 
 describe('lookupSync()', () => {
   let pid: number
-  before(() => {
-    pid = cp.fork(testScript, testScriptArgs).pid as number
-  })
-
-  after(() => {
-    try {
-      process.kill(pid)
-    } catch (err) { void err }
-  })
+  before(() => { pid = spawnChild() })
+  after(() => killSafe(pid))
 
   it('returns a process list', () => {
-    const list = lookupSync()
-    assert.ok(list.length > 0)
+    assert.ok(lookupSync().length > 0)
   })
+
   it('lookup.sync refs to lookupSync', () => {
     assert.equal(lookup.sync, lookupSync)
   })
@@ -68,34 +58,32 @@ describe('lookupSync()', () => {
 
 describe('kill()', () => {
   it('kills a process', async () => {
-    const pid = cp.fork(testScript, testScriptArgs).pid as number
+    const pid = spawnChild()
     assert.equal((await lookup({ pid })).length, 1)
     await kill(pid)
     assert.equal((await lookup({ pid })).length, 0)
   })
 
   it('kills with check', async () => {
-    let cheked = false
-    const cb = () => cheked = true
-
-    const pid = cp.fork(testScript, testScriptArgs).pid as number
+    let checked = false
+    const pid = spawnChild()
     assert.equal((await lookup({ pid })).length, 1)
 
-    const _pid = await kill(pid, {timeout: 1}, cb)
-    assert.equal(pid, _pid)
+    const result = await kill(pid, { timeout: 1 }, () => { checked = true })
+    assert.equal(result, pid)
     assert.equal((await lookup({ pid })).length, 0)
-    assert.equal(cheked, true)
+    assert.ok(checked)
   })
 })
 
 describe('tree()', () => {
   it('returns 1st level child', async () => {
-    const pid = cp.fork(testScript, [...testScriptArgs, '--fork=1', '--depth=2']).pid as number
-    await new Promise(resolve => setTimeout(resolve, 2000)) // wait for child process to spawn
+    const pid = spawnChild('--fork=1', '--depth=2')
+    await new Promise(resolve => setTimeout(resolve, SPAWN_DELAY))
 
     const list = await lookup({ arguments: marker })
     const children = await tree(pid)
-    const childrenAll = await tree({pid, recursive: true})
+    const childrenAll = await tree({ pid, recursive: true })
 
     await Promise.all(list.map(p => kill(p.pid)))
     await kill(pid)
@@ -103,13 +91,11 @@ describe('tree()', () => {
     assert.equal(children.length, 1)
     assert.equal(childrenAll.length, 2)
     assert.equal(list.length, 3)
-
     assert.equal((await lookup({ arguments: marker })).length, 0)
   })
 
   it('returns all ps list if no opts provided', async () => {
-    const list = await tree()
-    assert.ok(list.length > 0)
+    assert.ok((await tree()).length > 0)
   })
 })
 
@@ -119,12 +105,12 @@ describe('treeSync()', () => {
   })
 
   it('returns 1st level child', async () => {
-    const pid = cp.fork(testScript, [...testScriptArgs, '--fork=1', '--depth=2']).pid as number
-    await new Promise(resolve => setTimeout(resolve, 2000)) // wait for child process to spawn
+    const pid = spawnChild('--fork=1', '--depth=2')
+    await new Promise(resolve => setTimeout(resolve, SPAWN_DELAY))
 
     const list = lookupSync({ arguments: marker })
     const children = treeSync(pid)
-    const childrenAll =  treeSync({pid, recursive: true})
+    const childrenAll = treeSync({ pid, recursive: true })
 
     await Promise.all(list.map(p => kill(p.pid)))
     await kill(pid)
@@ -132,25 +118,17 @@ describe('treeSync()', () => {
     assert.equal(children.length, 1)
     assert.equal(childrenAll.length, 2)
     assert.equal(list.length, 3)
-
     assert.equal((await lookup({ arguments: marker })).length, 0)
   })
 })
 
-describe('ps -eo vs ps -lx output comparison', () => {
-  if (process.platform === 'win32') return
-
+describe('ps -eo vs ps -lx output comparison', { skip: process.platform === 'win32' }, () => {
   let pid: number
-  before(() => {
-    pid = cp.fork(testScript, testScriptArgs).pid as number
-  })
-  after(() => {
-    try { process.kill(pid) } catch { void 0 }
-  })
+  before(() => { pid = spawnChild() })
+  after(() => killSafe(pid))
 
   it('ps -eo pid,ppid,args returns valid entries', () => {
-    const stdout = execSync('ps -eo pid,ppid,args').toString()
-    const entries = normalizeOutput(parse(stdout, { format: 'unix' }))
+    const entries = normalizeOutput(parse(execSync('ps -eo pid,ppid,args').toString(), { format: 'unix' }))
 
     assert.ok(entries.length > 0, 'should return non-empty process list')
     for (const e of entries) {
@@ -160,9 +138,8 @@ describe('ps -eo vs ps -lx output comparison', () => {
   })
 
   it('ps -eo finds a known process with correct fields', () => {
-    const eoStdout = execSync('ps -eo pid,ppid,args').toString()
-    const eoEntries = normalizeOutput(parse(eoStdout, { format: 'unix' }))
-    const found = eoEntries.find(e => e.pid === String(pid))
+    const entries = normalizeOutput(parse(execSync('ps -eo pid,ppid,args').toString(), { format: 'unix' }))
+    const found = entries.find(e => e.pid === String(pid))
 
     assert.ok(found, `ps -eo should find spawned process ${pid}`)
     assert.equal(found!.pid, String(pid))
@@ -179,10 +156,8 @@ describe('ps -eo vs ps -lx output comparison', () => {
       return // ps -lx not available (e.g. BusyBox) — skip
     }
 
-    const eoStdout = execSync('ps -eo pid,ppid,args').toString()
-
     const lxEntries = normalizeOutput(parse(lxStdout, { format: 'unix' }))
-    const eoEntries = normalizeOutput(parse(eoStdout, { format: 'unix' }))
+    const eoEntries = normalizeOutput(parse(execSync('ps -eo pid,ppid,args').toString(), { format: 'unix' }))
 
     const lxFound = lxEntries.find(e => e.pid === String(pid))
     const eoFound = eoEntries.find(e => e.pid === String(pid))
@@ -195,7 +170,7 @@ describe('ps -eo vs ps -lx output comparison', () => {
   })
 })
 
-describe('extractWmic()', () => {
+describe('removeWmicPrefix()', () => {
   it('extracts wmic output', () => {
     const input = `CommandLine
 ParentProcessId  ProcessId
@@ -207,7 +182,6 @@ ParentProcessId  ProcessId
 PS C:\\Users\\user>`
 
     const sliced = removeWmicPrefix(input).trim()
-
-    assert.equal(sliced, input.slice(0, -'PS C:\\Users\\user>'.length -1).trim())
+    assert.equal(sliced, input.slice(0, -'PS C:\\Users\\user>'.length - 1).trim())
   })
 })

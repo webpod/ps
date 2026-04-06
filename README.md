@@ -20,7 +20,7 @@ This module uses different approaches for getting process list:
 
 | Platform                 | Method                                                                                                                                        |
 |--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| Unix/Mac                 | `ps -lx`                                                                                                                                      |
+| Unix/Mac                 | `ps -eo pid,ppid,args`                                                                                                                        |
 | Windows (kernel >= 26000)| `pwsh -NoProfile -Command "Get-CimInstance Win32_Process \| Select-Object ProcessId,ParentProcessId,CommandLine \| ConvertTo-Json -Compress"` |
 | Windows (kernel < 26000) | [`wmic`](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmic) `process get ProcessId,CommandLine`                                     |
 
@@ -68,13 +68,13 @@ Unix users can override the default `ps` arguments:
 ```ts
 lookup({
   command: 'node',
-  psargs: 'ux'
+  psargs: '-eo pid,ppid,comm'
 }, (err, resultList) => {
 // ...
 })
 ```
 
-Specify the `ppid` option to filter the results by the parent process id (make sure that your custom `psargs` provides this output: `-l` or `-j` for instance)
+Specify the `ppid` option to filter the results by the parent process id (make sure that your custom `psargs` provides this output: `-l` or `-j` for instance):
 ```ts
 lookup({
   command: 'mongod',
