@@ -238,7 +238,6 @@ tree.sync = treeSync
  * @param {number} opts.timeout
  * @param next
  */
-// eslint-disable-next-line sonarjs/cognitive-complexity
 export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPsKillOptions['signal'], next?: TPsNext ): Promise<void> => {
   if (typeof opts == 'function') {
     return kill(pid, undefined, opts)
