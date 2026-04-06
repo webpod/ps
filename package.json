@@ -23,10 +23,10 @@
     "build:dts": "tsc --emitDeclarationOnly --outDir target/dts",
     "build:docs": "typedoc --options src/main/typedoc",
     "build:stamp": "npx buildstamp",
-    "test": "concurrently 'npm:test:*' && npm run x:test:legacy",
+    "test": "concurrently 'npm:test:lint' 'npm:test:unit' && npm run test:legacy",
     "test:lint": "eslint -c src/test/lint/.eslintrc.json src",
     "test:unit": "c8 -r lcov -r text -o target/coverage -x src/scripts -x src/test -x target node --loader ts-node/esm --experimental-specifier-resolution=node src/scripts/test.mjs",
-    "x:test:legacy": "node ./node_modules/mocha/bin/mocha -t 0 -R spec src/test/legacy/test.cjs",
+    "test:legacy": "node ./node_modules/mocha/bin/mocha -t 0 -R spec src/test/legacy/test.cjs",
     "publish:draft": "npm run build && npm publish --no-git-tag-version"
   },
   "files": [

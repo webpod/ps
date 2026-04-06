@@ -3,7 +3,9 @@ import { describe, it, before, after } from 'node:test'
 import process from 'node:process'
 import * as cp from 'node:child_process'
 import * as path from 'node:path'
-import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix } from '../../main/ts/ps.ts'
+import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix, normalizeOutput } from '../../main/ts/ps.ts'
+import { parse } from '@webpod/ingrid'
+import { execSync } from 'node:child_process'
 
 const __dirname = new URL('.', import.meta.url).pathname
 const marker = Math.random().toString(16).slice(2)
@@ -132,6 +134,64 @@ describe('treeSync()', () => {
     assert.equal(list.length, 3)
 
     assert.equal((await lookup({ arguments: marker })).length, 0)
+  })
+})
+
+describe('ps -eo vs ps -lx output comparison', () => {
+  if (process.platform === 'win32') return
+
+  let pid: number
+  before(() => {
+    pid = cp.fork(testScript, testScriptArgs).pid as number
+  })
+  after(() => {
+    try { process.kill(pid) } catch { void 0 }
+  })
+
+  it('ps -eo pid,ppid,args returns valid entries', () => {
+    const stdout = execSync('ps -eo pid,ppid,args').toString()
+    const entries = normalizeOutput(parse(stdout, { format: 'unix' }))
+
+    assert.ok(entries.length > 0, 'should return non-empty process list')
+    for (const e of entries) {
+      assert.ok(e.pid, 'each entry should have pid')
+      assert.ok(e.command, 'each entry should have command')
+    }
+  })
+
+  it('ps -eo finds a known process with correct fields', () => {
+    const eoStdout = execSync('ps -eo pid,ppid,args').toString()
+    const eoEntries = normalizeOutput(parse(eoStdout, { format: 'unix' }))
+    const found = eoEntries.find(e => e.pid === String(pid))
+
+    assert.ok(found, `ps -eo should find spawned process ${pid}`)
+    assert.equal(found!.pid, String(pid))
+    assert.ok(found!.ppid, 'should have ppid')
+    assert.ok(found!.command, 'should have command')
+    assert.ok(found!.arguments.join(' ').includes(marker), 'should contain marker in args')
+  })
+
+  it('ps -eo and ps -lx return matching data for the same process', () => {
+    let lxStdout: string
+    try {
+      lxStdout = execSync('ps -lx').toString()
+    } catch {
+      return // ps -lx not available (e.g. BusyBox) — skip
+    }
+
+    const eoStdout = execSync('ps -eo pid,ppid,args').toString()
+
+    const lxEntries = normalizeOutput(parse(lxStdout, { format: 'unix' }))
+    const eoEntries = normalizeOutput(parse(eoStdout, { format: 'unix' }))
+
+    const lxFound = lxEntries.find(e => e.pid === String(pid))
+    const eoFound = eoEntries.find(e => e.pid === String(pid))
+
+    assert.ok(lxFound, `ps -lx should find process ${pid}`)
+    assert.ok(eoFound, `ps -eo should find process ${pid}`)
+    assert.equal(eoFound!.pid, lxFound!.pid, 'pid should match')
+    assert.equal(eoFound!.ppid, lxFound!.ppid, 'ppid should match')
+    assert.equal(eoFound!.command, lxFound!.command, 'command should match')
   })
 })
 
