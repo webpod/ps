@@ -2,163 +2,102 @@
 
 > A Node.js module for looking up running processes. Originated from [neekey/ps](https://github.com/neekey/ps), [UmbraEngineering/ps](https://github.com/UmbraEngineering/ps) and completely reforged.
 
-## Differences
-* [x] Rewritten in TypeScript
-* [x] CJS and ESM package entry points
-* [x] `table-parser` replaced with `@webpod/ingrid` to handle some issues: [neekey/ps#76](https://github.com/neekey/ps/issues/76), [neekey/ps#62](https://github.com/neekey/ps/issues/62), [neekey/table-parser#11](https://github.com/neekey/table-parser/issues/11), [neekey/table-parser#18](https://github.com/neekey/table-parser/issues/18)
-* [x] Provides promisified responses
-* [x] Brings sync API
-* [x] Builds a process subtree by parent
+## Features
+- Written in TypeScript, ships with types
+- CJS and ESM entry points
+- Promise and callback API, sync variants
+- Process tree traversal by parent pid
+- Uses `@webpod/ingrid` instead of `table-parser` ([neekey/ps#76](https://github.com/neekey/ps/issues/76), [neekey/ps#62](https://github.com/neekey/ps/issues/62))
 
 ## Install
 ```bash
-$ npm install @webpod/ps
+npm install @webpod/ps
 ```
 
 ## Internals
-This module uses different approaches for getting process list:
 
-| Platform                 | Method                                                                                                                                        |
-|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| Unix/Mac                 | `ps -eo pid,ppid,args`                                                                                                                        |
-| Windows (kernel >= 26000)| `pwsh -NoProfile -Command "Get-CimInstance Win32_Process \| Select-Object ProcessId,ParentProcessId,CommandLine \| ConvertTo-Json -Compress"` |
-| Windows (kernel < 26000) | [`wmic`](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmic) `process get ProcessId,CommandLine`                                     |
+| Platform                  | Command                                                                                                                                       |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| Unix / macOS              | `ps -eo pid,ppid,args`                                                                                                                       |
+| Windows (kernel >= 26000) | `pwsh -NoProfile -Command "Get-CimInstance Win32_Process \| Select-Object ProcessId,ParentProcessId,CommandLine \| ConvertTo-Json -Compress"` |
+| Windows (kernel < 26000)  | [`wmic`](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmic) `process get ProcessId,CommandLine`                                    |
 
-## Usage
+## API
 
-### lookup()
-Searches for the process by the specified `pid`.
+### lookup(query?, callback?)
+Returns a list of processes matching the query.
+
 ```ts
-import {lookup} from '@webpod/ps'
+import { lookup } from '@webpod/ps'
 
-// Both callback and promise styles are supported
-const list = await lookup({pid: 12345})
+// Find by pid
+const list = await lookup({ pid: 12345 })
+// [{ pid: '12345', ppid: '123', command: '/usr/bin/node', arguments: ['server.js', '--port=3000'] }]
 
-// or
-lookup({pid: 12345}, (err, list) => {
-  if (err) {
-    throw new Error(err)
-  }
+// Filter by command and/or arguments (treated as RegExp)
+const nodes = await lookup({ command: 'node', arguments: '--debug' })
 
-  const [found] = list
-  if (found) {
-    console.log('PID: %s, COMMAND: %s, ARGUMENTS: %s', found.pid, found.command, found.arguments)
-  } else {
-    console.log('No such process found!')
-  }
-})
+// Filter by parent pid
+const children = await lookup({ ppid: 82292 })
 
-// or syncronously
-const _list = lookup.sync({pid: 12345})
+// Synchronous
+const all = lookup.sync()
 ```
 
-Define a query opts to filter the results by `command` and/or `arguments` predicates:
+On Unix, you can override the default `ps` arguments via `psargs`:
 ```ts
-const list = await lookup({
-  command: 'node', // it will be used to build a regex 
-  arguments: '--debug',
-})
-
-list.forEach(entry => {
-  console.log('PID: %s, COMMAND: %s, ARGUMENTS: %s', entry.pid, entry.command, entry.arguments);
-})
+const list = await lookup({ command: 'node', psargs: '-eo pid,ppid,comm' })
 ```
 
-Unix users can override the default `ps` arguments:
+Callback style is also supported:
 ```ts
-lookup({
-  command: 'node',
-  psargs: '-eo pid,ppid,comm'
-}, (err, resultList) => {
-// ...
-})
+lookup({ pid: 12345 }, (err, list) => { /* ... */ })
 ```
 
-Specify the `ppid` option to filter the results by the parent process id (make sure that your custom `psargs` provides this output: `-l` or `-j` for instance):
-```ts
-lookup({
-  command: 'mongod',
-  psargs: '-l',
-  ppid: 82292
-}, (err, resultList) => {
- // ...
-})
-```
+### tree(opts?, callback?)
+Returns child processes of a given parent pid.
 
-### tree()
-Returns a child processes list by the specified parent `pid`. Some kind of shortcut for `lookup({ppid: pid})`.
 ```ts
 import { tree } from '@webpod/ps'
 
-const children = await tree(123) 
-/**
-[
-  {pid: 124, ppid: 123},
-  {pid: 125, ppid: 123}
-] 
-*/
+// Direct children
+const children = await tree(123)
+// [
+//   { pid: '124', ppid: '123', command: 'node', arguments: ['worker.js'] },
+//   { pid: '125', ppid: '123', command: 'node', arguments: ['worker.js'] }
+// ]
+
+// All descendants
+const all = await tree({ pid: 123, recursive: true })
+// [
+//   { pid: '124', ppid: '123', ... },
+//   { pid: '125', ppid: '123', ... },
+//   { pid: '126', ppid: '124', ... },
+//   { pid: '127', ppid: '125', ... }
+// ]
+
+// Synchronous
+const list = tree.sync({ pid: 123, recursive: true })
 ```
 
-To obtain all nested children, set `recursive` option to `true`:
-```ts
-const children = await tree({pid: 123, recursive: true}) 
-/**
-[
-  {pid: 124, ppid: 123},
-  {pid: 125, ppid: 123},
-
-  {pid: 126, ppid: 124},
-  {pid: 127, ppid: 124},
-  {pid: 128, ppid: 124},
-  
-  {pid: 129, ppid: 125},
-  {pid: 130, ppid: 125},
-] 
-*/
-
-// or syncronously
-const list = tree.sync({pid: 123, recursive: true}) 
-```
-
-### kill()
-Eliminates the process by its `pid`.
+### kill(pid, opts?, callback?)
+Kills a process and optionally verifies it has exited.
 
 ```ts
 import { kill } from '@webpod/ps'
 
-kill('12345', (err, pid) => {
-  if (err) {
-    throw new Error(err)
-  } else {
-    console.log('Process %s has been killed!', pid)
-  }
+await kill(12345)
+
+// With signal
+await kill(12345, 'SIGKILL')
+
+// With options and verification callback
+await kill(12345, { signal: 'SIGKILL', timeout: 10 }, (err, pid) => {
+  // called when the process is confirmed dead or timeout is reached
 })
 ```
 
-Method `kill` also supports a `signal` option to be passed. It's only a wrapper of `process.kill()` with checking of that killing is finished after the method is called.
-
-```ts
-import { kill } from '@webpod/ps'
-
-// Pass signal SIGKILL for killing the process without allowing it to clean up
-kill('12345', 'SIGKILL', (err, pid) => {
-  if (err) {
-    throw new Error(err)
-  } else {
-    console.log('Process %s has been killed without a clean-up!', pid)
-  }
-})
-```
-
-You can also use object notation to specify more opts:
-```ts
-kill( '12345', {
-  signal: 'SIGKILL',
-  timeout: 10,  // will set up a ten seconds timeout if the killing is not successful
-}, () => {})
-```
-
-Notice that the nodejs build-in `process.kill()` does not accept number as a signal, you will have to use string format.
+When a `callback` is provided, `kill` polls the process list until the process disappears or the `timeout` (default 30s) is reached.
 
 ## License
 [MIT](./LICENSE)
