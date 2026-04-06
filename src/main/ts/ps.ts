@@ -20,7 +20,7 @@ const LOOKUPS: Record<string, {
   },
   ps: {
     cmd: 'ps',
-    args: ['-lx'],
+    args: ['-eo', 'pid,ppid,args'],
     parse(stdout: string) {
       return parse(stdout, { format: 'unix' })
     }
@@ -126,11 +126,7 @@ const _lookup = ({
   const { promise, resolve, reject } = pFactory()
   const result: TPsLookupEntry[] = []
   const lookupFlow = IS_WIN ? IS_WIN2025_PLUS ? 'pwsh' : 'wmic' : 'ps'
-  const {
-    parse,
-    cmd,
-    args
-  } = LOOKUPS[lookupFlow]
+  const { parse, cmd, args } = LOOKUPS[lookupFlow]
   const callback: TSpawnCtx['callback'] = (err, {stdout}) => {
     if (err) {
       reject(err)
@@ -314,7 +310,7 @@ export const normalizeOutput = (data: TIngridResponse): TPsLookupEntry[] =>
   data.reduce<TPsLookupEntry[]>((m, d) => {
     const pid = (d.PID || d.ProcessId)?.[0]
     const ppid = (d.PPID || d.ParentProcessId)?.[0]
-    const _cmd = d.CMD || d.CommandLine || d.COMMAND || []
+    const _cmd = d.CMD || d.CommandLine || d.COMMAND || d.ARGS || []
     const cmd = _cmd.length === 1 ? _cmd[0].split(/\s+/) : _cmd
 
     if (pid && cmd.length > 0) {

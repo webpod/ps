@@ -110,45 +110,90 @@ jobs:
           npx ggcp target/docs https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git/gh-pages --message='chore: update docs'
           npx ggcp target/coverage/lcov.info https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git/coverage/${{ github.sha }}.lcov.info --message='chore: add coverage for ${{ github.sha }}'
 
-  pr:
+  test-node:
     needs: build
     if: github.event_name == 'pull_request'
-    name: pr-os-${{ matrix.os }}-nodejs${{ matrix.node-version }}
+    name: test-node-${{ matrix.node-version }}
     strategy:
       matrix:
-        os: [ ubuntu-24.04, windows-2022, windows-2025 ]
-        node-version: [ 20 ]
-
-    runs-on: ${{ matrix.os }}
+        node-version: [ 20, 24 ]
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-
       - uses: actions/download-artifact@v5
         with:
           name: build
+      - run: npm ci
+      - run: npm run test
 
-      - name: Fetch deps
-        run: npm ci
+  smoke-node-14:
+    needs: build
+    if: github.event_name == 'pull_request'
+    name: smoke-node-14
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 14
+      - uses: actions/download-artifact@v5
+        with:
+          name: build
+      - run: npm install --no-package-lock
+      - run: npm run test:legacy
 
-      - name: Run all tests
-        if: matrix.os == 'ubuntu-24.04'
-        run: npm run test
-
-      - name: Run legacy tests only
-        if: matrix.os != 'ubuntu-24.04'
+  smoke-os:
+    needs: build
+    if: github.event_name == 'pull_request'
+    name: smoke-${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ macos-latest, windows-2022, windows-2025 ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+      - uses: actions/download-artifact@v5
+        with:
+          name: build
+      - run: npm ci
+      - name: Run smoke tests
+        if: "!contains(matrix.os, 'windows')"
+        run: npm run test:unit
+      - name: Run smoke tests (windows)
+        if: contains(matrix.os, 'windows')
         timeout-minutes: 2
-        run: npm run x:test:legacy
-#        run: |
-#          wmic process get ProcessId,ParentProcessId,CommandLine
+        run: npm run test:legacy
 
-#      - name: wmic via node
-#        if: matrix.os == 'windows-latest'
-#        run: |
-#          node -e "const { execSync } = require('child_process'); console.log(execSync('wmic process get ProcessId,ParentProcessId,CommandLine').toString())"
+  smoke-alpine:
+    needs: build
+    if: github.event_name == 'pull_request'
+    name: smoke-alpine-busybox
+    runs-on: ubuntu-24.04
+    container: node:20-alpine
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          name: build
+      - name: Verify BusyBox ps
+        run: |
+          which busybox && busybox --list | grep -w ps
+          ps -eo pid,ppid,args | head -5
+      - run: npm ci
+      - run: npm run test:unit
