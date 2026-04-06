@@ -88,7 +88,7 @@ const _lookup = ({ query = {}, cb = noop, sync = false }: {
   cb?: TPsLookupCallback
   query?: TPsLookupQuery
 }) => {
-  const { promise, resolve, reject } = sync ? makeSyncDeferred([]) : makeDeferred()
+  const { promise, resolve, reject } = sync ? makeSyncDeferred<TPsLookupEntry[]>([]) : makeDeferred<TPsLookupEntry[]>()
   const result: TPsLookupEntry[] = []
   const { parse: parseOutput, cmd, args: defaultArgs } = LOOKUPS[lookupFlow]
   const args = !IS_WIN && query.psargs ? query.psargs.split(/\s+/) : defaultArgs
