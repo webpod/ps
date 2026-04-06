@@ -3,7 +3,7 @@ import { describe, it, before, after } from 'node:test'
 import process from 'node:process'
 import { fork, execSync } from 'node:child_process'
 import * as path from 'node:path'
-import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix, normalizeOutput } from '../../main/ts/ps.ts'
+import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix, normalizeOutput, filterProcessList } from '../../main/ts/ps.ts'
 import { parse } from '@webpod/ingrid'
 
 const __dirname = new URL('.', import.meta.url).pathname
@@ -40,6 +40,14 @@ describe('lookup()', () => {
     assert.equal(list.length, 1)
     assert.equal(list[0].pid, pid)
   })
+
+  if (process.platform !== 'win32') {
+    it('supports custom psargs', async () => {
+      const list = await lookup({ pid, psargs: '-eo pid,ppid,args' })
+      assert.equal(list.length, 1)
+      assert.equal(list[0].pid, pid)
+    })
+  }
 })
 
 describe('lookupSync()', () => {
@@ -86,7 +94,6 @@ describe('tree()', () => {
     const childrenAll = await tree({ pid, recursive: true })
 
     await Promise.all(list.map(p => kill(p.pid)))
-    await kill(pid)
 
     assert.equal(children.length, 1)
     assert.equal(childrenAll.length, 2)
@@ -113,7 +120,6 @@ describe('treeSync()', () => {
     const childrenAll = treeSync({ pid, recursive: true })
 
     await Promise.all(list.map(p => kill(p.pid)))
-    await kill(pid)
 
     assert.equal(children.length, 1)
     assert.equal(childrenAll.length, 2)
@@ -170,6 +176,115 @@ describe('ps -eo vs ps -lx output comparison', { skip: process.platform === 'win
   })
 })
 
+describe('kill() edge cases', () => {
+  it('rejects when killing a non-existent pid', async () => {
+    await assert.rejects(() => kill(999_999), { code: 'ESRCH' })
+  })
+
+  it('rejects with invalid signal', async () => {
+    const pid = spawnChild()
+    await assert.rejects(() => kill(pid, 'INVALID'))
+    killSafe(pid)
+  })
+
+  it('passes signal as string shorthand', async () => {
+    const pid = spawnChild()
+    await kill(pid, 'SIGKILL')
+    assert.equal((await lookup({ pid })).length, 0)
+  })
+
+  it('invokes callback on error for non-existent pid', async () => {
+    let cbErr: any
+    await kill(999_999, (err) => { cbErr = err }).catch(() => {})
+    assert.ok(cbErr)
+  })
+})
+
+describe('kill() timeout', { skip: process.platform === 'win32' }, () => {
+  it('rejects on timeout when process stays alive', async () => {
+    // Signal 0 checks existence but doesn't actually kill — process stays alive, so poll times out
+    const pid = spawnChild()
+    await assert.rejects(
+      () => kill(pid, { signal: 0 as any, timeout: 1 }),
+      (err: Error) => err.message.includes('timeout')
+    )
+    killSafe(pid)
+  })
+})
+
+describe('tree() edge cases', () => {
+  it('accepts string pid', async () => {
+    const pid = spawnChild()
+    const children = await tree(String(pid))
+    assert.ok(Array.isArray(children))
+    killSafe(pid)
+  })
+
+  it('treeSync accepts number pid', () => {
+    const pid = spawnChild()
+    const children = treeSync(pid)
+    assert.ok(Array.isArray(children))
+    killSafe(pid)
+  })
+})
+
+describe('filterProcessList()', () => {
+  const list = [
+    { pid: '1', ppid: '0', command: '/usr/bin/node', arguments: ['server.js', '--port=3000'] },
+    { pid: '2', ppid: '1', command: '/usr/bin/python', arguments: ['app.py'] },
+    { pid: '3', ppid: '1', command: '/usr/bin/node', arguments: ['worker.js'] },
+  ]
+
+  it('filters by pid array', () => {
+    assert.equal(filterProcessList(list, { pid: ['1', '3'] }).length, 2)
+  })
+
+  it('filters by command regex', () => {
+    assert.equal(filterProcessList(list, { command: 'node' }).length, 2)
+  })
+
+  it('filters by arguments regex', () => {
+    assert.equal(filterProcessList(list, { arguments: 'port' }).length, 1)
+  })
+
+  it('filters by ppid', () => {
+    assert.equal(filterProcessList(list, { ppid: 1 }).length, 2)
+  })
+
+  it('returns all when no filters', () => {
+    assert.equal(filterProcessList(list).length, 3)
+  })
+})
+
+describe('normalizeOutput()', () => {
+  it('skips entries without pid', () => {
+    const data = [{ COMMAND: ['node'] }] as any
+    assert.equal(normalizeOutput(data).length, 0)
+  })
+
+  it('skips entries without command', () => {
+    const data = [{ PID: ['1'] }] as any
+    assert.equal(normalizeOutput(data).length, 0)
+  })
+
+  it('handles ARGS header (macOS)', () => {
+    const data = [{ PID: ['1'], PPID: ['0'], ARGS: ['/usr/bin/node server.js'] }] as any
+    const result = normalizeOutput(data)
+    assert.equal(result.length, 1)
+    assert.ok(result[0].command)
+  })
+
+  it('handles quoted paths on Windows', () => {
+    const data = [{
+      ProcessId: ['1'],
+      ParentProcessId: ['0'],
+      CommandLine: ['"C:\\Program Files\\node.exe" server.js']
+    }] as any
+    const result = normalizeOutput(data)
+    assert.equal(result.length, 1)
+  })
+})
+
 describe('removeWmicPrefix()', () => {
   it('extracts wmic output', () => {
     const input = `CommandLine
@@ -183,5 +298,11 @@ PS C:\\Users\\user>`
 
     const sliced = removeWmicPrefix(input).trim()
     assert.equal(sliced, input.slice(0, -'PS C:\\Users\\user>'.length - 1).trim())
+  })
+
+  it('handles output without prompt suffix', () => {
+    const input = `ParentProcessId  ProcessId\n0                1`
+    const result = removeWmicPrefix(input)
+    assert.ok(result.includes('ProcessId'))
   })
 })

@@ -81,23 +81,25 @@ const list = tree.sync({ pid: 123, recursive: true })
 ```
 
 ### kill(pid, opts?, callback?)
-Kills a process and optionally verifies it has exited.
+Kills a process and waits for it to exit. The returned promise resolves once the process is confirmed dead, or rejects on timeout.
 
 ```ts
 import { kill } from '@webpod/ps'
 
+// Sends SIGTERM, polls until the process is gone (default timeout 30s)
 await kill(12345)
 
 // With signal
 await kill(12345, 'SIGKILL')
 
-// With options and verification callback
-await kill(12345, { signal: 'SIGKILL', timeout: 10 }, (err, pid) => {
+// With custom timeout (seconds) and polling interval (ms)
+await kill(12345, { signal: 'SIGKILL', timeout: 10, interval: 250 })
+
+// With callback
+await kill(12345, (err, pid) => {
   // called when the process is confirmed dead or timeout is reached
 })
 ```
-
-When a `callback` is provided, `kill` polls the process list until the process disappears or the `timeout` (default 30s) is reached.
 
 ## License
 [MIT](./LICENSE)
