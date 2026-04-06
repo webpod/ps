@@ -25,7 +25,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: build
           path: |
@@ -55,7 +55,7 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm run test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: coverage
           path: |
@@ -106,9 +106,10 @@ jobs:
         env:
           GIT_COMMITTER_NAME: ${{ vars.GIT_COMMITTER_NAME }}
           GIT_COMMITTER_EMAIL: ${{ vars.GIT_COMMITTER_EMAIL }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npx ggcp target/docs https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git/gh-pages --message='chore: update docs'
-          npx ggcp target/coverage/lcov.info https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git/coverage/${{ github.sha }}.lcov.info --message='chore: add coverage for ${{ github.sha }}'
+          npx ggcp target/docs https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git/gh-pages --message='chore: update docs'
+          npx ggcp target/coverage/lcov.info https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git/coverage/${{ github.sha }}.lcov.info --message='chore: add coverage for ${{ github.sha }}'
 
   test-node:
     needs: build
