@@ -93,7 +93,7 @@ describe('tree()', () => {
     const children = await tree(pid)
     const childrenAll = await tree({ pid, recursive: true })
 
-    await Promise.all(list.map(p => kill(p.pid)))
+    await Promise.all(list.map(p => kill(p.pid, 'SIGKILL')))
 
     assert.equal(children.length, 1)
     assert.equal(childrenAll.length, 2)
@@ -119,7 +119,7 @@ describe('treeSync()', () => {
     const children = treeSync(pid)
     const childrenAll = treeSync({ pid, recursive: true })
 
-    await Promise.all(list.map(p => kill(p.pid)))
+    await Promise.all(list.map(p => kill(p.pid, 'SIGKILL')))
 
     assert.equal(children.length, 1)
     assert.equal(childrenAll.length, 2)
@@ -194,7 +194,7 @@ describe('kill() edge cases', () => {
   })
 
   it('invokes callback on error for non-existent pid', async () => {
-    let cbErr: any
+    let cbErr: unknown
     await kill(999_999, (err) => { cbErr = err }).catch(() => {})
     assert.ok(cbErr)
   })
