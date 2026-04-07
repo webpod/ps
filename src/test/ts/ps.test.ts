@@ -208,6 +208,27 @@ describe('kill() timeout', { skip: process.platform === 'win32' }, () => {
     )
     killSafe(pid)
   })
+
+  it('honors custom timeout option', async () => {
+    const pid = spawnChild()
+    const start = Date.now()
+    await assert.rejects(
+      () => kill(pid, { signal: 0 as any, timeout: 2, interval: 200 }),
+      (err: Error) => err.message.includes('timeout')
+    )
+    assert.ok(Date.now() - start >= 2000)
+    killSafe(pid)
+  })
+
+  it('uses 30s default timeout when none provided', async () => {
+    const pid = spawnChild()
+    let settled = false
+    const p = kill(pid, { signal: 0 as any }).catch(() => { settled = true })
+    await new Promise(r => setTimeout(r, 1500))
+    assert.equal(settled, false, 'kill should still be pending well before 30s')
+    killSafe(pid)
+    await p
+  })
 })
 
 describe('tree() edge cases', () => {
