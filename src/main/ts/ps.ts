@@ -196,15 +196,16 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
   const { timeout = 30, signal = 'SIGTERM', interval = 200 } = opts || {}
   const sPid = String(pid)
   let done = false
+  const state: { timer?: NodeJS.Timeout } = {}
   const settle = (err?: unknown) => {
     if (done) return
     done = true
-    clearTimeout(timer)
-    err ? reject(err) : resolve(pid)
+    clearTimeout(state.timer)
+    if (err) reject(err)
+    else resolve(pid)
     next?.(err ?? null, pid)
   }
 
-  let timer: NodeJS.Timeout
   try {
     process.kill(+pid, signal)
   } catch (e) {
@@ -213,7 +214,7 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
   }
 
   let since = Date.now()
-  timer = setTimeout(() => settle(new Error('Kill process timeout')), timeout * 1000)
+  state.timer = setTimeout(() => settle(new Error('Kill process timeout')), timeout * 1000)
 
   const poll = (): unknown =>
     sharedSnapshot(since).then(({ startedAt, list }) => {
