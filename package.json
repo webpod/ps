@@ -65,7 +65,7 @@
     "esbuild-plugin-entry-chunks": "^0.1.18",
     "fast-glob": "^3.3.3",
     "minimist": "^1.2.8",
-    "mocha": "^11.7.5",
+    "mocha": "^12.0.0-beta-9.2",
     "oxlint": "^1.59.0",
     "size-limit": "^12.0.1",
     "ts-node": "^10.9.2",
