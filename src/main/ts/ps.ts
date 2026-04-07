@@ -153,6 +153,27 @@ const _tree = ({ cb = noop, opts, sync = false }: {
   }
 }
 
+/**
+ * Returns a `lookup()` snapshot started at or after `since`, dedupes concurrent callers.
+ * Lets parallel `kill()` polls share a single `ps` invocation: join the in-flight one
+ * if it's fresh enough, otherwise wait for the next queued one.
+ */
+type TSnapshot = { startedAt: number, list: TPsLookupEntry[] }
+let inflight: { startedAt: number, promise: Promise<TSnapshot> } | null = null
+let queued: Promise<TSnapshot> | null = null
+const sharedSnapshot = (since: number): Promise<TSnapshot> => {
+  if (inflight && inflight.startedAt >= since) return inflight.promise
+  if (queued) return queued
+  const after = inflight?.promise.catch(noop) ?? Promise.resolve()
+  return queued = after.then(() => {
+    queued = null
+    const startedAt = Date.now()
+    const promise = lookup().then(list => ({ startedAt, list }))
+    inflight = { startedAt, promise }
+    return promise.finally(() => { inflight = inflight?.promise === promise ? null : inflight })
+  })
+}
+
 export const pickTree = (list: TPsLookupEntry[], pid: string | number, recursive = false): TPsLookupEntry[] => {
   const children = list.filter(p => p.ppid === String(pid))
   return [
@@ -173,48 +194,37 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
 
   const { promise, resolve, reject } = makeDeferred()
   const { timeout = 30, signal = 'SIGTERM', interval = 200 } = opts || {}
+  const sPid = String(pid)
+  let done = false
+  const settle = (err?: unknown) => {
+    if (done) return
+    done = true
+    clearTimeout(timer)
+    err ? reject(err) : resolve(pid)
+    next?.(err ?? null, pid)
+  }
 
+  let timer: NodeJS.Timeout
   try {
     process.kill(+pid, signal)
   } catch (e) {
-    reject(e)
-    next?.(e)
+    settle(e)
     return promise
   }
 
-  let confirmCount = 0
-  let timedOut = false
+  let since = Date.now()
+  timer = setTimeout(() => settle(new Error('Kill process timeout')), timeout * 1000)
 
-  const timer = setTimeout(() => {
-    timedOut = true
-    const err = new Error('Kill process timeout')
-    reject(err)
-    next?.(err)
-  }, timeout * 1000)
-
-  const poll = () =>
-    lookup({ pid }, (err, list = []) => {
-      if (timedOut) return
-      if (err) {
-        clearTimeout(timer)
-        reject(err)
-        next?.(err, pid)
-        return
-      }
-      if (list.length > 0) {
-        confirmCount = Math.max(confirmCount - 1, 0)
-        setTimeout(poll, interval)
-        return
-      }
-      confirmCount++
-      if (confirmCount >= 5) {
-        clearTimeout(timer)
-        resolve(pid)
-        next?.(null, pid)
+  const poll = (): unknown =>
+    sharedSnapshot(since).then(({ startedAt, list }) => {
+      if (done) return
+      since = startedAt + 1
+      if (list.some(p => p.pid === sPid)) {
+        setTimeout(poll, Math.max(0, startedAt + interval - Date.now()))
       } else {
-        setTimeout(poll, interval)
+        settle()
       }
-    })
+    }, settle)
 
   poll()
   return promise
