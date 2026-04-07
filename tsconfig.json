@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
     "rootDir": "./src/main/ts/",
-    "baseUrl": "./src/main/ts/",
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
     "moduleResolution": "nodenext",
     "module": "nodenext",
     "target": "esnext",
+    "types": ["node"],
     "strict": true,
     "noImplicitAny": true,
     "declaration": true,
