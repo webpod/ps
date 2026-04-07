@@ -1,3 +1,13 @@
+## [1.2.0](https://github.com/webpod/ps/compare/v1.1.0...v1.2.0) (2026-04-07)
+
+### Fixes & improvements
+* refactor: optimize internal polling flow ([cad5b6f](https://github.com/webpod/ps/commit/cad5b6f56f972c50323c7669a07bf287bd574e83))
+* docs: update usage examples ([29e4f93](https://github.com/webpod/ps/commit/29e4f93cdb8c1bb83fb9ec57a0beab3d748ae573))
+* refactor: internal code imprs ([64fe5bb](https://github.com/webpod/ps/commit/64fe5bbd0ae095864ef452a780c7773c74e6efc4))
+
+### Features
+* feat: ensure kill confirmation ([3307702](https://github.com/webpod/ps/commit/330770281664293ea723c29906c005502c8e8dfa))
+
 ## [1.1.0](https://github.com/webpod/ps/compare/v1.0.0...v1.1.0) (2026-04-06)
 
 ### Features
