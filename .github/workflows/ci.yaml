@@ -148,6 +148,8 @@ jobs:
         with:
           name: build
       - run: npm install --no-package-lock
+      # npm 6 (shipped with Node 14) ignores `overrides`, so pin chokidar manually
+      - run: npm install --no-package-lock --no-save chokidar@^4
       - run: npm run test:legacy
 
   smoke-os:

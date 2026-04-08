@@ -172,14 +172,17 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
 
   return new Promise<any>((resolve, reject) => {
     let done = false
+    const entry: TKillEntry = { pid: sPid, registered: 0, interval, settle: noop }
     const settle = (err?: unknown) => {
       if (done) return
       done = true
       clearTimeout(timer)
+      killPending.delete(entry)
       if (err) reject(err)
       else resolve(pid)
       next?.(err ?? null, pid)
     }
+    entry.settle = settle
 
     const timer = setTimeout(() => settle(new Error('Kill process timeout')), timeout * 1000)
 
@@ -190,40 +193,47 @@ export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPs
       return
     }
 
-    let since = Date.now()
-    const poll = (): unknown =>
-      sharedSnapshot(since).then(({ startedAt, list }) => {
-        if (done) return
-        since = startedAt + 1
-        if (list.some(p => p.pid === sPid)) {
-          setTimeout(poll, Math.max(0, startedAt + interval - Date.now()))
-        } else {
-          settle()
-        }
-      }, settle)
-
-    poll()
+    entry.registered = Date.now()
+    killPending.add(entry)
+    scheduleKillTick()
   })
 }
 
 /**
- * Returns a `lookup()` snapshot started at or after `since`, dedupes concurrent callers.
- * Lets parallel `kill()` polls share a single `ps` invocation: join the in-flight one
- * if it's fresh enough, otherwise wait for the next queued one.
+ * Shared kill-confirmation loop. A single `lookup()` per tick serves *all* pending kills
+ * registered before the tick's snapshot started — so a flood of kills can never indefinitely
+ * postpone any single confirmation, and we never spawn more than one `ps` per tick.
  */
-type TSnapshot = { startedAt: number, list: TPsLookupEntry[] }
-let inflight: { startedAt: number, promise: Promise<TSnapshot> } | null = null
-let queued: Promise<TSnapshot> | null = null
-const sharedSnapshot = (since: number): Promise<TSnapshot> => {
-  if (inflight && inflight.startedAt >= since) return inflight.promise
-  if (queued) return queued
-  const after = inflight?.promise.catch(noop) ?? Promise.resolve()
-  return queued = after.then(() => {
-    queued = null
-    const startedAt = Date.now()
-    const promise = lookup().then(list => ({ startedAt, list }))
-    inflight = { startedAt, promise }
-    return promise.finally(() => { if (inflight?.promise === promise) inflight = null })
+type TKillEntry = { pid: string, registered: number, interval: number, settle: (err?: unknown) => void }
+const killPending = new Set<TKillEntry>()
+let killTickTimer: NodeJS.Timeout | null = null
+let killTickRunning = false
+
+const scheduleKillTick = (lastStart = 0): void => {
+  if (killTickTimer || killTickRunning || killPending.size === 0) return
+  let minInterval = Infinity
+  for (const k of killPending) if (k.interval < minInterval) minInterval = k.interval
+  const delay = lastStart === 0 ? 0 : Math.max(0, lastStart + minInterval - Date.now())
+  killTickTimer = setTimeout(runKillTick, delay)
+}
+
+const runKillTick = (): void => {
+  killTickTimer = null
+  if (killPending.size === 0) return
+  killTickRunning = true
+  const startedAt = Date.now()
+  lookup().then(list => {
+    const alive = new Set(list.map(p => p.pid))
+    for (const k of killPending) {
+      // Snapshot predates this kill's process.kill — can't trust it, wait for next tick
+      if (k.registered >= startedAt) continue
+      if (!alive.has(k.pid)) k.settle()
+    }
+    killTickRunning = false
+    scheduleKillTick(startedAt)
+  }, err => {
+    for (const k of killPending) k.settle(err)
+    killTickRunning = false
   })
 }
 
