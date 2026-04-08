@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/webpod/ps/compare/v1.2.0...v1.2.1) (2026-04-08)
+
+### Fixes & improvements
+* refactor: single kill confirmation queue ([86ea498](https://github.com/webpod/ps/commit/86ea49876e54c9283a12c31d3213aaaa528f00a9))
+* refactor: simplify internals ([65a394f](https://github.com/webpod/ps/commit/65a394f8eab9f99bcc91b9d817e3956ecb44b291))
+
 ## [1.2.0](https://github.com/webpod/ps/compare/v1.1.0...v1.2.0) (2026-04-07)
 
 ### Fixes & improvements
