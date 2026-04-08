@@ -148,8 +148,9 @@ jobs:
         with:
           name: build
       - run: npm install --no-package-lock
-      # npm 6 (shipped with Node 14) ignores `overrides`, so pin chokidar manually
-      - run: npm install --no-package-lock --no-save chokidar@^4
+      # npm 6 (shipped with Node 14) ignores `overrides` and nests chokidar@5 under mocha;
+      # replace it with the CJS-compatible chokidar@4
+      - run: rm -rf node_modules/mocha/node_modules/chokidar && npm install --no-package-lock --no-save --prefix node_modules/mocha chokidar@^4
       - run: npm run test:legacy
 
   smoke-os:
