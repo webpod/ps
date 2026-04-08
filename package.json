@@ -26,7 +26,7 @@
     "test": "concurrently 'npm:test:lint' 'npm:test:unit' 'npm:test:size' && npm run test:legacy",
     "test:lint": "oxlint -c oxlintrc.json src/main/ts src/test/ts",
     "test:unit": "c8 -r lcov -r text -o target/coverage -x src/scripts -x src/test -x target node --loader ts-node/esm --experimental-specifier-resolution=node src/scripts/test.mjs",
-    "test:legacy": "node ./node_modules/mocha/bin/mocha -t 0 -R spec src/test/legacy/test.cjs",
+    "test:legacy": "mocha -t 0 -R spec src/test/legacy/test.cjs",
     "test:size": "size-limit",
     "publish:draft": "npm run build && npm publish --no-git-tag-version"
   },
@@ -76,5 +76,8 @@
     "type": "git",
     "url": "git://github.com/webpod/ps.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "chokidar": "^4.0.3"
+  }
 }
