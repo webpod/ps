@@ -4,22 +4,25 @@ import os from 'node:os'
 import { parse, type TIngridResponse } from '@webpod/ingrid'
 import { exec, type TSpawnCtx } from 'zurk/spawn'
 
+const noop = () => {}
+
 const IS_WIN = process.platform === 'win32'
 const IS_WIN2025_PLUS = IS_WIN && Number.parseInt(os.release().split('.')[2], 10) >= 26_000
+const LOOKUP_FLOW = IS_WIN ? IS_WIN2025_PLUS ? 'pwsh' : 'wmic' : 'ps'
 const LOOKUPS: Record<string, {
-  cmd: string,
-  args?: string[],
+  cmd: string
+  args: string[]
   parse: (stdout: string) => TIngridResponse
 }> = {
   wmic: {
     cmd: 'wmic process get ProcessId,ParentProcessId,CommandLine',
     args: [],
-    parse: (stdout) => parse(removeWmicPrefix(stdout), { format: 'win' })
+    parse: (stdout) => parse(removeWmicPrefix(stdout), { format: 'win' }),
   },
   ps: {
     cmd: 'ps',
     args: ['-eo', 'pid,ppid,args'],
-    parse: (stdout) => parse(stdout, { format: 'unix' })
+    parse: (stdout) => parse(stdout, { format: 'unix' }),
   },
   pwsh: {
     cmd: 'pwsh',
@@ -38,8 +41,6 @@ const LOOKUPS: Record<string, {
     },
   },
 }
-
-const lookupFlow = IS_WIN ? IS_WIN2025_PLUS ? 'pwsh' : 'wmic' : 'ps'
 
 export type TPsLookupEntry = {
   pid: string
@@ -77,80 +78,132 @@ export type TPsNext = (err?: any, data?: any) => void
  * Supports both promise and callback styles.
  */
 export const lookup = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> =>
-  _lookup({ query, cb, sync: false }) as Promise<TPsLookupEntry[]>
+  runLookup(query, cb, false)
 
 /** Synchronous version of {@link lookup}. */
 export const lookupSync = (query: TPsLookupQuery = {}, cb: TPsLookupCallback = noop): TPsLookupEntry[] =>
-  _lookup({ query, cb, sync: true })
+  runLookup(query, cb, true)
 
 lookup.sync = lookupSync
 
-const _lookup = ({ query = {}, cb = noop, sync = false }: {
-  sync?: boolean
-  cb?: TPsLookupCallback
-  query?: TPsLookupQuery
-}) => {
-  const { promise, resolve, reject } = sync ? makeSyncDeferred<TPsLookupEntry[]>([]) : makeDeferred<TPsLookupEntry[]>()
-  const result: TPsLookupEntry[] = []
-  const { parse: parseOutput, cmd, args: defaultArgs } = LOOKUPS[lookupFlow]
+function runLookup(query: TPsLookupQuery, cb: TPsLookupCallback, sync: true): TPsLookupEntry[]
+function runLookup(query: TPsLookupQuery, cb: TPsLookupCallback, sync: false): Promise<TPsLookupEntry[]>
+function runLookup(query: TPsLookupQuery, cb: TPsLookupCallback, sync: boolean): TPsLookupEntry[] | Promise<TPsLookupEntry[]> {
+  const { parse: parseOutput, cmd, args: defaultArgs } = LOOKUPS[LOOKUP_FLOW]
   const args = !IS_WIN && query.psargs ? query.psargs.split(/\s+/) : defaultArgs
+  let result: TPsLookupEntry[] = []
+  let error: unknown
 
-  const callback: TSpawnCtx['callback'] = (err, { stdout }) => {
-    if (err) {
-      reject(err)
-      cb(err)
-      return
-    }
-    result.push(...filterProcessList(normalizeOutput(parseOutput(stdout)), query))
-    resolve(result)
-    cb(null, result)
+  const handle: TSpawnCtx['callback'] = (err, { stdout }) => {
+    if (err) { error = err; return }
+    result = filterProcessList(normalizeOutput(parseOutput(stdout)), query)
   }
 
-  exec({ cmd, args, callback, sync, run(cb) { cb() } })
+  if (sync) {
+    exec({ cmd, args, sync: true, callback: handle, run(c) { c() } })
+    cb(error ?? null, error ? undefined : result)
+    if (error) throw error
+    return result
+  }
 
-  return Object.assign(promise, result)
+  return new Promise((resolve, reject) => {
+    exec({
+      cmd, args, sync: false, run(c) { c() },
+      callback(err, ctx) {
+        handle(err, ctx)
+        if (error) { cb(error); reject(error) }
+        else { cb(null, result); resolve(result) }
+      },
+    })
+  })
 }
 
 /** Returns child processes of the given parent pid. */
-export const tree = async (opts?: string | number | TPsTreeOpts, cb?: TPsLookupCallback): Promise<TPsLookupEntry[]> =>
-  _tree({ opts, cb })
-
-/** Synchronous version of {@link tree}. */
-export const treeSync = (opts?: string | number | TPsTreeOpts, cb?: TPsLookupCallback): TPsLookupEntry[] =>
-  _tree({ opts, cb, sync: true }) as TPsLookupEntry[]
-
-tree.sync = treeSync
-
-const _tree = ({ cb = noop, opts, sync = false }: {
-  opts?: string | number | TPsTreeOpts
-  cb?: TPsLookupCallback
-  sync?: boolean
-}) => {
-  if (typeof opts === 'string' || typeof opts === 'number') {
-    return _tree({ opts: { pid: opts }, cb, sync })
-  }
-
-  const onData = (all: TPsLookupEntry[]) => {
-    if (opts === undefined) return all
-    const list = pickTree(all, opts.pid, opts.recursive ?? false)
+export const tree = async (opts?: string | number | TPsTreeOpts, cb: TPsLookupCallback = noop): Promise<TPsLookupEntry[]> => {
+  try {
+    const list = pickFromTree(await lookup(), opts)
     cb(null, list)
     return list
-  }
-
-  const onError = (err: unknown) => {
+  } catch (err) {
     cb(err)
     throw err
   }
+}
 
+/** Synchronous version of {@link tree}. */
+export const treeSync = (opts?: string | number | TPsTreeOpts, cb: TPsLookupCallback = noop): TPsLookupEntry[] => {
   try {
-    const all = _lookup({ sync })
-    return sync
-      ? onData(all)
-      : (all as Promise<TPsLookupEntry[]>).then(onData, onError)
+    const list = pickFromTree(lookupSync(), opts)
+    cb(null, list)
+    return list
   } catch (err) {
     cb(err)
-    return Promise.reject(err)
+    throw err
   }
+}
+
+tree.sync = treeSync
+
+const pickFromTree = (all: TPsLookupEntry[], opts?: string | number | TPsTreeOpts): TPsLookupEntry[] => {
+  if (opts === undefined) return all
+  const { pid, recursive = false } = typeof opts === 'object' ? opts : { pid: opts }
+  return pickTree(all, pid, recursive)
+}
+
+export const pickTree = (list: TPsLookupEntry[], pid: string | number, recursive = false): TPsLookupEntry[] => {
+  const children = list.filter(p => p.ppid === String(pid))
+  return recursive
+    ? children.flatMap(p => [p, ...pickTree(list, p.pid, true)])
+    : children
+}
+
+/**
+ * Kills a process by pid.
+ * @param pid - Process ID to kill
+ * @param opts - Signal, options object, or callback
+ * @param next - Callback invoked when kill is confirmed or timed out
+ */
+export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPsKillOptions['signal'], next?: TPsNext): Promise<void> => {
+  if (typeof opts === 'function') return kill(pid, undefined, opts)
+  if (typeof opts === 'string' || typeof opts === 'number') return kill(pid, { signal: opts }, next)
+
+  const { timeout = 30, signal = 'SIGTERM', interval = 200 } = opts || {}
+  const sPid = String(pid)
+
+  return new Promise<any>((resolve, reject) => {
+    let done = false
+    const settle = (err?: unknown) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      if (err) reject(err)
+      else resolve(pid)
+      next?.(err ?? null, pid)
+    }
+
+    const timer = setTimeout(() => settle(new Error('Kill process timeout')), timeout * 1000)
+
+    try {
+      process.kill(+pid, signal)
+    } catch (e) {
+      settle(e)
+      return
+    }
+
+    let since = Date.now()
+    const poll = (): unknown =>
+      sharedSnapshot(since).then(({ startedAt, list }) => {
+        if (done) return
+        since = startedAt + 1
+        if (list.some(p => p.pid === sPid)) {
+          setTimeout(poll, Math.max(0, startedAt + interval - Date.now()))
+        } else {
+          settle()
+        }
+      }, settle)
+
+    poll()
+  })
 }
 
 /**
@@ -170,65 +223,8 @@ const sharedSnapshot = (since: number): Promise<TSnapshot> => {
     const startedAt = Date.now()
     const promise = lookup().then(list => ({ startedAt, list }))
     inflight = { startedAt, promise }
-    return promise.finally(() => { inflight = inflight?.promise === promise ? null : inflight })
+    return promise.finally(() => { if (inflight?.promise === promise) inflight = null })
   })
-}
-
-export const pickTree = (list: TPsLookupEntry[], pid: string | number, recursive = false): TPsLookupEntry[] => {
-  const children = list.filter(p => p.ppid === String(pid))
-  return [
-    ...children,
-    ...children.flatMap(p => recursive ? pickTree(list, p.pid, true) : [])
-  ]
-}
-
-/**
- * Kills a process by pid.
- * @param pid - Process ID to kill
- * @param opts - Signal, options object, or callback
- * @param next - Callback invoked when kill is confirmed or timed out
- */
-export const kill = (pid: string | number, opts?: TPsNext | TPsKillOptions | TPsKillOptions['signal'], next?: TPsNext): Promise<void> => {
-  if (typeof opts === 'function') return kill(pid, undefined, opts)
-  if (typeof opts === 'string' || typeof opts === 'number') return kill(pid, { signal: opts }, next)
-
-  const { promise, resolve, reject } = makeDeferred()
-  const { timeout = 30, signal = 'SIGTERM', interval = 200 } = opts || {}
-  const sPid = String(pid)
-  let done = false
-  const state: { timer?: NodeJS.Timeout } = {}
-  const settle = (err?: unknown) => {
-    if (done) return
-    done = true
-    clearTimeout(state.timer)
-    if (err) reject(err)
-    else resolve(pid)
-    next?.(err ?? null, pid)
-  }
-
-  try {
-    process.kill(+pid, signal)
-  } catch (e) {
-    settle(e)
-    return promise
-  }
-
-  let since = Date.now()
-  state.timer = setTimeout(() => settle(new Error('Kill process timeout')), timeout * 1000)
-
-  const poll = (): unknown =>
-    sharedSnapshot(since).then(({ startedAt, list }) => {
-      if (done) return
-      since = startedAt + 1
-      if (list.some(p => p.pid === sPid)) {
-        setTimeout(poll, Math.max(0, startedAt + interval - Date.now()))
-      } else {
-        settle()
-      }
-    }, settle)
-
-  poll()
-  return promise
 }
 
 export const normalizeOutput = (data: TIngridResponse): TPsLookupEntry[] =>
@@ -284,24 +280,3 @@ const isBin = (f: string): boolean => {
     return false
   }
 }
-
-type Deferred<T = any, E = any> = {
-  promise: Promise<T>
-  resolve: (value?: T | PromiseLike<T>) => void
-  reject: (reason?: E) => void
-}
-
-const makeDeferred = <T = any, E = any>(): Deferred<T, E> => {
-  let resolve!: Deferred<T, E>['resolve']
-  let reject!: Deferred<T, E>['reject']
-  const promise = new Promise<T>((res, rej) => { resolve = res as Deferred<T, E>['resolve']; reject = rej })
-  return { resolve, reject, promise }
-}
-
-const makeSyncDeferred = <T = any>(result: T): Deferred<T> => ({
-  promise: result as any,
-  resolve: () => {},
-  reject(e) { throw e },
-})
-
-const noop = () => {}
