@@ -1,3 +1,8 @@
+## [1.3.0](https://github.com/webpod/ps/compare/v1.2.1...v1.3.0) (2026-11-05)
+
+### Features
+* feat: separate `parceWmic` flow (#20) ([7cc275a](https://github.com/webpod/ps/commit/7cc275a34e4cec36cef7c8e61f46ef9a0e4a5ead))
+
 ## [1.2.1](https://github.com/webpod/ps/compare/v1.2.0...v1.2.1) (2026-04-08)
 
 ### Fixes & improvements
