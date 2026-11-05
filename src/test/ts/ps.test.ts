@@ -3,7 +3,7 @@ import { describe, it, before, after } from 'node:test'
 import process from 'node:process'
 import { fork, execSync } from 'node:child_process'
 import * as path from 'node:path'
-import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix, normalizeOutput, filterProcessList } from '../../main/ts/ps.ts'
+import { kill, lookup, lookupSync, tree, treeSync, removeWmicPrefix, parseWmic, parsePwsh, normalizeOutput, filterProcessList } from '../../main/ts/ps.ts'
 import { parse } from '@webpod/ingrid'
 
 const __dirname = new URL('.', import.meta.url).pathname
@@ -323,5 +323,83 @@ PS C:\\Users\\user>`
     const input = `ParentProcessId  ProcessId\n0                1`
     const result = removeWmicPrefix(input)
     assert.ok(result.includes('ProcessId'))
+  })
+
+  it('keeps the last row when a command contains >', () => {
+    const input = `CommandLine          ParentProcessId  ProcessId\ncmd /c foo > out.log  1                2\nwmic                 2                3  \n`
+    assert.equal(removeWmicPrefix(input), input)
+  })
+})
+
+const renderWmic = (rows: [string, number, number][]) => {
+  const w = Math.max('CommandLine'.length, ...rows.map(r => r[0].length))
+  const row = (c: string, pp: string | number, p: string | number) =>
+    `${c.padEnd(w)}  ${String(pp).padEnd(15)}  ${String(p).padEnd(9)}  \r\r\n`
+  return row('CommandLine', 'ParentProcessId', 'ProcessId') + rows.map(r => row(...r)).join('') + '\r\r\n'
+}
+
+const lookupIn = (rows: [string, number, number][], pid: number) =>
+  filterProcessList(normalizeOutput(parseWmic(removeWmicPrefix(renderWmic(rows)))), { pid })
+
+describe('parseWmic()', () => {
+  const rows: [string, number, number][] = [
+    ['', 0, 4],
+    ['"C:\\Program Files\\node.exe"  ./test.js  --foo', 4, 100],
+    ['cmd /c foo > out.log', 100, 200],
+    ['wmic process get ProcessId', 100, 300],
+  ]
+
+  for (const lines of [1, 2, 3, 4]) {
+    it(`keeps pids aligned with a ${lines}-line command`, () => {
+      const cmd = Array.from({ length: lines }, (_, i) => `line${i} = ${i}`).join('\r\n')
+      const list = [rows[0], [cmd, 4, 50], ...rows.slice(1)] as [string, number, number][]
+
+      assert.deepEqual(
+        parseWmic(removeWmicPrefix(renderWmic(list))).map(r => r.ProcessId[0]),
+        ['4', '50', '100', '200', '300']
+      )
+      assert.equal(lookupIn(list, 100)[0].pid, '100')
+      assert.equal(lookupIn(list, 100).length, 1)
+      const [{ command, arguments: args }] = lookupIn(list, 50)
+      assert.equal([command, ...args].join(' '), cmd.replace(/\s+/g, ' '))
+    })
+  }
+
+  it('handles the widest row shortened by decoding', () => {
+    const list = [...rows, ['C:\\tools\\long-name-to-set-column-width.exe --flag EEEE', 1, 900]] as [string, number, number][]
+    assert.deepEqual(
+      parseWmic(renderWmic(list).replace('EEEE', 'é')).map(r => r.ProcessId[0]),
+      ['4', '100', '200', '300', '900']
+    )
+  })
+
+  it('parses blank commands and ppids', () => {
+    assert.deepEqual(parseWmic(renderWmic(rows))[0], { CommandLine: ['-'], ParentProcessId: ['0'], ProcessId: ['4'] })
+    assert.equal(lookupIn(rows, 200)[0].ppid, '100')
+  })
+
+  it('throws when there are no rows', () => {
+    for (const output of ['', '\r\r\n', 'No Instance(s) Available.\r\r\n', 'Node - HOST\r\r\nERROR:\r\r\nDescription = Quota violation\r\r\n']) {
+      assert.throws(() => parseWmic(output), /no process rows/)
+    }
+  })
+})
+
+describe('parsePwsh()', () => {
+  it('maps Win32_Process json', () => {
+    const output = JSON.stringify([
+      { ProcessId: 4, ParentProcessId: 0, CommandLine: null },
+      { ProcessId: 100, ParentProcessId: 4, CommandLine: 'node a\nb' },
+    ])
+    assert.deepEqual(parsePwsh(output), [
+      { ProcessId: ['4'], ParentProcessId: ['0'], CommandLine: [] },
+      { ProcessId: ['100'], ParentProcessId: ['4'], CommandLine: ['node a\nb'] },
+    ])
+  })
+})
+
+describe('lookup() failures', () => {
+  it('rejects on unparsable output', { skip: process.platform === 'win32' }, async () => {
+    await assert.rejects(lookup({ psargs: '--definitely-invalid' }), /ps failed:[^]*stderr: \S/)
   })
 })

@@ -1,7 +1,7 @@
 import process from 'node:process'
 import fs from 'node:fs'
 import os from 'node:os'
-import { parse, type TIngridResponse } from '@webpod/ingrid'
+import { parse as parsePs, type TIngridResponse } from '@webpod/ingrid'
 import { exec, type TSpawnCtx } from 'zurk/spawn'
 
 const noop = () => {}
@@ -17,28 +17,17 @@ const LOOKUPS: Record<string, {
   wmic: {
     cmd: 'wmic process get ProcessId,ParentProcessId,CommandLine',
     args: [],
-    parse: (stdout) => parse(removeWmicPrefix(stdout), { format: 'win' }),
+    parse: (stdout) => parseWmic(removeWmicPrefix(stdout)),
   },
   ps: {
     cmd: 'ps',
     args: ['-eo', 'pid,ppid,args'],
-    parse: (stdout) => parse(stdout, { format: 'unix' }),
+    parse: (stdout) => parsePs(stdout),
   },
   pwsh: {
     cmd: 'pwsh',
     args: ['-NoProfile', '-Command', '"Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress"'],
-    parse(stdout) {
-      try {
-        const arr: Array<{ ProcessId: number, ParentProcessId: number, CommandLine: string | null }> = JSON.parse(stdout)
-        return arr.map(p => ({
-          ProcessId: [String(p.ProcessId)],
-          ParentProcessId: [String(p.ParentProcessId)],
-          CommandLine: p.CommandLine ? [p.CommandLine] : [],
-        }))
-      } catch {
-        return []
-      }
-    },
+    parse: (stdout) => parsePwsh(stdout),
   },
 }
 
@@ -94,9 +83,13 @@ function runLookup(query: TPsLookupQuery, cb: TPsLookupCallback, sync: boolean):
   let result: TPsLookupEntry[] = []
   let error: unknown
 
-  const handle: TSpawnCtx['callback'] = (err, { stdout }) => {
+  const handle: TSpawnCtx['callback'] = (err, { stdout, stderr }) => {
     if (err) { error = err; return }
-    result = filterProcessList(normalizeOutput(parseOutput(stdout)), query)
+    try {
+      result = filterProcessList(normalizeOutput(parseOutput(stdout)), query)
+    } catch (e) {
+      error = new Error(`${cmd} failed: ${(e as Error).message}\nstdout: ${stdout.slice(0, 512)}\nstderr: ${stderr}`)
+    }
   }
 
   if (sync) {
@@ -269,12 +262,45 @@ export const filterProcessList = (processList: TPsLookupEntry[], query: TPsLooku
 
 export const removeWmicPrefix = (stdout: string): string => {
   const s = stdout.indexOf(LOOKUPS.wmic.cmd + os.EOL)
-  const e = stdout.includes('>')
+  const e = stdout.trimEnd().endsWith('>')
     ? stdout.trimEnd().lastIndexOf(os.EOL)
     : stdout.length
   return (s > 0
     ? stdout.slice(s + LOOKUPS.wmic.cmd.length, e)
     : stdout.slice(0, e)).trimStart()
+}
+
+export { parsePs }
+
+// CommandLine may contain newlines, so a row is recognized by its trailing ppid and pid columns
+export const parseWmic = (stdout: string): TIngridResponse => {
+  const rows: TIngridResponse = []
+  let head = ''
+  for (const line of stdout.split(/\r*\n/).slice(1)) {
+    const m = /\s\s(\d+)\s\s+(\d+)\s*$/.exec(line)
+    if (!m) {
+      head += line + ' '
+      continue
+    }
+    const cmd = (head + line.slice(0, m.index)).trim()
+    rows.push({ CommandLine: [cmd || '-'], ParentProcessId: [m[1]], ProcessId: [m[2]] })
+    head = ''
+  }
+  if (rows.length === 0) throw new Error('no process rows found')
+  return rows
+}
+
+export const parsePwsh = (stdout: string): TIngridResponse => {
+  try {
+    const arr: Array<{ ProcessId: number, ParentProcessId: number, CommandLine: string | null }> = JSON.parse(stdout)
+    return arr.map(p => ({
+      ProcessId: [String(p.ProcessId)],
+      ParentProcessId: [String(p.ParentProcessId)],
+      CommandLine: p.CommandLine ? [p.CommandLine] : [],
+    }))
+  } catch {
+    return []
+  }
 }
 
 const isBin = (f: string): boolean => {
