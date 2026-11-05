@@ -15,17 +15,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Use Node.js 24
-        uses: actions/setup-node@v5
+      - name: Use Node.js 26
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: build
           path: |
@@ -40,22 +40,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: 'npm'
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: build
       - name: Fetch deps
         run: npm ci
       - name: Run tests
         run: npm run test
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: |
@@ -77,16 +77,16 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: 'npm'
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
       - name: Run release
@@ -116,17 +116,17 @@ jobs:
     name: test-node-${{ matrix.node-version }}
     strategy:
       matrix:
-        node-version: [ 20, 24 ]
-    runs-on: ubuntu-24.04
+        node-version: [ 22, 24, 26 ]
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: build
       - run: npm ci
@@ -136,21 +136,20 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request'
     name: smoke-node-14
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 14
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: build
       - run: npm install --no-package-lock
-      # npm 6 (shipped with Node 14) ignores `overrides` and nests chokidar@5 under mocha;
-      # replace it with the CJS-compatible chokidar@4
-      - run: rm -rf node_modules/mocha/node_modules/chokidar && npm install --no-package-lock --no-save --prefix node_modules/mocha chokidar@^4
+      # mocha@12 is ESM with import attributes, mocha@10 is the last line that supports Node 14
+      - run: npm install --no-package-lock --no-save mocha@10
       - run: npm run test:legacy
 
   smoke-os:
@@ -159,17 +158,17 @@ jobs:
     name: smoke-${{ matrix.os }}
     strategy:
       matrix:
-        os: [ macos-latest, windows-2022, windows-2025 ]
+        os: [ macos-26, windows-2022, windows-2025 ]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 26
           cache: 'npm'
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: build
       - run: npm ci
@@ -185,13 +184,13 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request'
     name: smoke-alpine-busybox
-    runs-on: ubuntu-24.04
-    container: node:20-alpine
+    runs-on: ubuntu-26.04
+    container: node:26-alpine@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 # 26.13
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: build
       - name: Verify BusyBox ps

@@ -196,3 +196,30 @@ describe('test', function () {
     });
   });
 });
+
+[1, 2, 3].forEach(function (newlines) {
+  describe('lookup with a command containing ' + newlines + ' newline(s)', function () {
+    var multiline = null;
+
+    before(function (done) {
+      var code = 'setInterval(function () {}, 1000) //' + '\n//'.repeat(newlines);
+      multiline = cp.spawn(process.execPath, ['-e', code], { stdio: 'ignore' });
+      setTimeout(done, 500);
+    });
+
+    after(function () {
+      multiline.kill();
+    });
+
+    it('finds exactly the requested processes', function (done) {
+      ps.lookup({ pid: [process.pid, multiline.pid] }, function (err, list) {
+        assert.ifError(err);
+        assert.deepEqual(
+          list.map(function (p) { return p.pid; }).sort(),
+          [String(process.pid), String(multiline.pid)].sort()
+        );
+        done();
+      });
+    });
+  });
+});
